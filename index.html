@@ -1,0 +1,781 @@
+<title>Rotation Aiming Bench</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: instrument bench — 3D stage fills the left, a scrolling control rack on the right; stacks on phones. */
+:root {
+  --bg: #e8edf0; --panel: #f6f8f9; --raised: #ffffff; --fg: #14202a; --muted: #55646e; --line: #d0d9df;
+  --accent: #0d6e6a; --accent-fg: #ffffff; --target: #d07c00;
+  --good: #1d8549; --warn: #a86f12; --bad: #cf3b3b;
+  --ax-x: #d9453f; --ax-y: #2f9e55; --ax-z: #3a72e0;
+  --tr-euler: #c2409a; --tr-slerp: #1497ab; --tr-track: #7c5cff;
+  --scene-bg: #e1e8ec; --scene-grid: #bccad3; --scene-grid2: #d2dce2; --scene-sphere: #7a8c99; --scene-ring: #8a98a3; --scene-body: #c4cfd7;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1215; --panel: #131a1f; --raised: #1a232a; --fg: #e1e8ed; --muted: #8b9ba6; --line: #26323b;
+  --accent: #3fb5ad; --accent-fg: #062220; --target: #f2a32b;
+  --good: #4cc283; --warn: #e0b34a; --bad: #f06a63;
+  --ax-x: #f0605a; --ax-y: #4cc276; --ax-z: #5b8ff0;
+  --tr-euler: #e15fb9; --tr-slerp: #2fc3d6; --tr-track: #9b84ff;
+  --scene-bg: #0a0f12; --scene-grid: #24323c; --scene-grid2: #17222a; --scene-sphere: #6b7e8b; --scene-ring: #7b8b97; --scene-body: #56666f;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d1215; --panel: #131a1f; --raised: #1a232a; --fg: #e1e8ed; --muted: #8b9ba6; --line: #26323b;
+  --accent: #3fb5ad; --accent-fg: #062220; --target: #f2a32b;
+  --good: #4cc283; --warn: #e0b34a; --bad: #f06a63;
+  --ax-x: #f0605a; --ax-y: #4cc276; --ax-z: #5b8ff0;
+  --tr-euler: #e15fb9; --tr-slerp: #2fc3d6; --tr-track: #9b84ff;
+  --scene-bg: #0a0f12; --scene-grid: #24323c; --scene-grid2: #17222a; --scene-sphere: #6b7e8b; --scene-ring: #7b8b97; --scene-body: #56666f;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); }
+.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; padding: 16px; }
+
+/* ---------- stage ---------- */
+.stage { position: relative; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--scene-bg); }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud { position: absolute; pointer-events: none; font-family: var(--f-mono); font-size: 12px; color: var(--fg); }
+.hud-tl { top: 14px; left: 14px; right: 14px; display: grid; gap: 6px; justify-items: start; }
+.err-big { font: 600 34px/1 var(--f-display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.err-big small { font: 500 12px/1 var(--f-mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; display: block; margin-bottom: 4px; }
+.cap { max-width: 46ch; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font-family: var(--f-body); font-size: 13px; }
+.cap.lock { border-color: var(--bad); }
+.hud-bl { left: 14px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; right: 14px; }
+.hud-bl span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.hud-br { right: 14px; top: 14px; color: var(--muted); text-align: right; }
+
+/* ---------- panel ---------- */
+.panel { min-width: 0; min-height: 0; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 24px; display: flex; flex-direction: column; gap: 18px; }
+.brand h1 { font: 700 26px/1.05 var(--f-display); margin: 0 0 6px; letter-spacing: .005em; text-wrap: balance; }
+.brand p { margin: 0; color: var(--muted); font-size: 13px; }
+.cx { color: var(--ax-x); } .cy { color: var(--ax-y); } .cz { color: var(--ax-z); } .ct { color: var(--target); }
+.group { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.group h2 { margin: 0; font: 600 13px/1 var(--f-display); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.group h2 .tag { font: 400 11px var(--f-mono); letter-spacing: 0; text-transform: none; }
+.row { display: grid; grid-template-columns: 6.6rem minmax(0, 1fr) 4.8rem; align-items: center; gap: 10px; }
+.row label { font-size: 13px; line-height: 1.2; }
+.row label b { font-family: var(--f-mono); font-weight: 500; }
+.row label small { display: block; color: var(--muted); font-size: 11px; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+input[type=number], select { width: 100%; font: 13px var(--f-mono); color: var(--fg); background: var(--raised); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; font-variant-numeric: tabular-nums; }
+select { font-family: var(--f-body); padding: 6px 8px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: 500 13px var(--f-body); color: var(--fg); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--raised); flex-wrap: wrap; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 6px 10px; font-size: 12.5px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.note { margin: 0; font-size: 12.5px; color: var(--muted); }
+.note b { color: var(--fg); font-weight: 500; }
+.formula { margin: 0; font: 12.5px/1.6 var(--f-mono); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px; overflow-x: auto; white-space: pre; }
+.result { margin: 0; font-size: 12.5px; min-height: 1.5em; }
+.result b { font-family: var(--f-mono); font-weight: 500; }
+.switch { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.switch input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; font-size: 12.5px; align-items: baseline; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 11px/1 var(--f-body); letter-spacing: .04em; text-transform: uppercase; padding: 4px 7px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.meter { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--good); transition: width .1s linear; }
+.matrix { width: 100%; border-collapse: collapse; font: 12.5px var(--f-mono); font-variant-numeric: tabular-nums; }
+.matrix th { font-weight: 500; font-size: 11.5px; padding: 0 4px 4px; text-align: right; }
+.matrix td { text-align: right; padding: 3px 4px; border-top: 1px solid var(--line); }
+.matrix td:first-child, .matrix th:first-child { text-align: left; color: var(--muted); }
+
+@media (max-width: 880px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 62vh; min-height: 340px; max-height: 560px; }
+  .panel { overflow: visible; }
+  .err-big { font-size: 26px; }
+  .hud-br { display: none; }
+}
+@media (max-width: 420px) {
+  .row { grid-template-columns: 5.4rem minmax(0, 1fr) 4.2rem; gap: 8px; }
+  .hud-bl { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
+</style>
+
+<div class="app">
+  <section class="stage" id="stage" aria-label="3D view">
+    <div class="hud hud-tl">
+      <div class="err-big"><small>Pointing error</small><span id="hudErr">—</span></div>
+      <div class="cap" id="cap" hidden></div>
+    </div>
+    <div class="hud hud-br">Drag to orbit · scroll to zoom · right-drag to pan</div>
+    <div class="hud hud-bl">
+      <span><i class="sw" style="background:var(--target)"></i>target t</span>
+      <span><i class="sw" style="background:var(--ax-x)"></i>nose (body x)</span>
+      <span><i class="sw" style="background:var(--tr-euler)"></i>Euler-lerp path</span>
+      <span><i class="sw" style="background:var(--tr-slerp)"></i>slerp path</span>
+      <span><i class="sw" style="background:var(--tr-track)"></i>tracking path</span>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <header class="brand">
+      <h1>Rotation Aiming Bench</h1>
+      <p>Turn the body until its nose (<b class="cx">body x</b>) points along the <b class="ct">target</b>. World frame is Z-up. Body frame is <b class="cx">x</b> forward, <b class="cy">y</b> left, <b class="cz">z</b> up (ROS REP-103). Every angle follows the right-hand rule, so positive pitch about +y tips the nose <em>down</em>.</p>
+    </header>
+
+    <section class="group">
+      <h2>Target direction <span class="tag" id="tVec"></span></h2>
+      <div class="row"><label for="tAz">Azimuth<small>from +X toward +Y</small></label><input type="range" id="tAz" min="-180" max="180" step="0.5"><input type="number" id="tAzN" min="-180" max="180" step="0.5" aria-label="Azimuth degrees"></div>
+      <div class="row"><label for="tEl">Elevation<small>above XY plane</small></label><input type="range" id="tEl" min="-90" max="90" step="0.5"><input type="number" id="tElN" min="-90" max="90" step="0.5" aria-label="Elevation degrees"></div>
+      <div class="btns">
+        <button id="tRand">Random</button>
+        <button id="tUp">Near zenith (88°)</button>
+        <button id="tBehind">Behind the nose</button>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>Euler angles <span class="tag">intrinsic, degrees</span></h2>
+      <label class="field" for="order">Rotation sequence
+        <select id="order">
+          <option value="ZYX">Z-Y′-X″ · yaw, pitch, roll (aerospace, robotics)</option>
+          <option value="ZXY">Z-X′-Y″</option>
+          <option value="YXZ">Y-X′-Z″ (common in graphics cameras)</option>
+          <option value="XYZ">X-Y′-Z″</option>
+          <option value="XZY">X-Z′-Y″</option>
+          <option value="YZX">Y-Z′-X″</option>
+        </select>
+      </label>
+      <div class="row"><label for="a0" id="lab0"></label><input type="range" id="a0" min="-180" max="180" step="0.5"><input type="number" id="n0" min="-180" max="180" step="0.5" aria-label="Angle 1 degrees"></div>
+      <div class="row"><label for="a1" id="lab1"></label><input type="range" id="a1" min="-90" max="90" step="0.5"><input type="number" id="n1" min="-90" max="90" step="0.5" aria-label="Angle 2 degrees"></div>
+      <div class="row"><label for="a2" id="lab2"></label><input type="range" id="a2" min="-180" max="180" step="0.5"><input type="number" id="n2" min="-180" max="180" step="0.5" aria-label="Angle 3 degrees"></div>
+      <div class="btns">
+        <button id="zero">Zero all</button>
+        <button id="play">Play the sequence 1 → 2 → 3</button>
+      </div>
+      <p class="note" id="orderNote"></p>
+    </section>
+
+    <section class="group">
+      <h2>Solve for the target</h2>
+      <div class="field">Move there by
+        <div class="seg" id="interpSeg" role="group" aria-label="Interpolation">
+          <button data-v="euler" aria-pressed="false">Interpolating Euler angles</button>
+          <button data-v="slerp" aria-pressed="true">Quaternion slerp</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="primary" id="solveLevel">Aim level (roll = 0)</button>
+        <button class="primary" id="solveArc">Aim by shortest arc</button>
+      </div>
+      <pre class="formula" id="formula"></pre>
+      <p class="result" id="result"></p>
+      <p class="note"><b>Aim level</b> builds a frame with x = t and y kept horizontal, then decomposes it into the selected sequence. <b>Shortest arc</b> applies the smallest rotation that takes the current nose onto t (axis f × t, angle acos f·t), so roll lands wherever it lands. Pointing fixes 2 of the 3 rotational degrees of freedom, and the third is your choice.</p>
+    </section>
+
+    <section class="group">
+      <h2>Closed-loop tracking</h2>
+      <label class="switch"><input type="checkbox" id="track"> Track the target continuously</label>
+      <div class="field">Control law
+        <div class="seg" id="lawSeg" role="group" aria-label="Control law">
+          <button data-v="vector" aria-pressed="true">Vector error (body rate)</button>
+          <button data-v="angles" aria-pressed="false">Angle error (gimbal servo)</button>
+        </div>
+      </div>
+      <div class="row"><label for="gain">Gain k<small>1/s, rate cap 120°/s</small></label><input type="range" id="gain" min="0.3" max="8" step="0.1"><input type="number" id="gainN" min="0.3" max="8" step="0.1" aria-label="Gain"></div>
+      <div class="field">Moving target
+        <div class="seg" id="moveSeg" role="group" aria-label="Target motion">
+          <button data-v="off" aria-pressed="true">Still</button>
+          <button data-v="circle" aria-pressed="false">Circle in azimuth</button>
+          <button data-v="zenith" aria-pressed="false">Pass over zenith</button>
+        </div>
+      </div>
+      <p class="note"><b>Vector error:</b> ω = k·(f × t), turning about the axis perpendicular to nose and target. <b>Angle error:</b> each Euler angle chases its own setpoint, like a two-axis pan/tilt mount. Run both with the target passing over the zenith and compare the paths.</p>
+    </section>
+
+    <section class="group">
+      <h2>State</h2>
+      <dl class="kv">
+        <dt>Pointing</dt><dd><span class="pill" id="pill">—</span></dd>
+        <dt>Nose f = R·x̂</dt><dd id="fVec"></dd>
+        <dt>Target in body frame</dt><dd id="tBody"></dd>
+        <dt>Bearing seen from body</dt><dd id="bearing"></dd>
+        <dt>Quaternion (w, x, y, z)</dt><dd id="quat"></dd>
+        <dt>Axis–angle</dt><dd id="axang"></dd>
+        <dt>Gimbal margin</dt><dd id="gmText"></dd>
+      </dl>
+      <div class="meter" aria-hidden="true"><i id="gmBar"></i></div>
+      <p class="note">Gimbal margin is the angle between the 1st and 3rd rotation axes, 90° − |angle 2|. At 0° the two axes coincide and the mount loses a degree of freedom.</p>
+      <div style="overflow-x:auto">
+        <table class="matrix" aria-label="Rotation matrix">
+          <thead><tr><th>R</th><th class="cx">body x̂</th><th class="cy">body ŷ</th><th class="cz">body ẑ</th></tr></thead>
+          <tbody id="mat"></tbody>
+        </table>
+      </div>
+      <p class="note">Each column of R is a body axis written in world coordinates. The first column is the nose direction f.</p>
+    </section>
+
+    <section class="group">
+      <h2>View</h2>
+      <label class="switch"><input type="checkbox" id="showGimbal" checked> Gimbal rings and pivot pins</label>
+      <label class="switch"><input type="checkbox" id="showSphere" checked> Pointing sphere grid (30° spacing)</label>
+      <div class="btns"><button id="clearTrails">Clear paths</button><button id="resetView">Reset camera</button></div>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  "use strict";
+  const D2R = Math.PI / 180, R2D = 180 / Math.PI, RS = 2.7, MAX_RATE = 120;
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const AXV = { X: V(1, 0, 0), Y: V(0, 1, 0), Z: V(0, 0, 1) };
+  const ROLE = { Z: "yaw", Y: "pitch", X: "roll" };
+  const SYM = { Z: "ψ", Y: "θ", X: "φ" };
+  const $ = (id) => document.getElementById(id);
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const wrap = (x) => ((x + 180) % 360 + 360) % 360 - 180;
+  const fmt = (x, d = 1) => { const s = Math.abs(x) < 0.5 * Math.pow(10, -d) ? 0 : x; return (s < 0 ? "−" : "") + Math.abs(s).toFixed(d); };
+  const fv = (v, d = 3) => "(" + fmt(v.x, d) + ", " + fmt(v.y, d) + ", " + fmt(v.z, d) + ")";
+
+  const S = {
+    order: "ZYX", ang: [-70, 20, 25], tAz: 50, tEl: 35,
+    interp: "slerp", track: false, law: "vector", gain: 2.5, move: "off",
+    sweep: null
+  };
+
+  // ---------- rotation math ----------
+  function qFromAng(order, ang) {
+    const e = new THREE.Euler(0, 0, 0, order); // three.js order "ZYX" = Rz·Ry·Rx = intrinsic Z, y′, x″
+    order.split("").forEach((a, i) => { e[a.toLowerCase()] = ang[i] * D2R; });
+    return new THREE.Quaternion().setFromEuler(e);
+  }
+  function angFromQ(order, q) {
+    const e = new THREE.Euler().setFromQuaternion(q, order);
+    return order.split("").map((a) => e[a.toLowerCase()] * R2D);
+  }
+  const curQ = () => qFromAng(S.order, S.ang);
+  const fwd = (q) => V(1, 0, 0).applyQuaternion(q);
+  function tgt() {
+    const a = S.tAz * D2R, e = S.tEl * D2R;
+    return V(Math.cos(e) * Math.cos(a), Math.cos(e) * Math.sin(a), Math.sin(e));
+  }
+  function setTargetVec(v) {
+    v = v.clone().normalize();
+    S.tEl = Math.asin(clamp(v.z, -1, 1)) * R2D;
+    if (Math.hypot(v.x, v.y) > 1e-9) S.tAz = Math.atan2(v.y, v.x) * R2D;
+  }
+  // Look-at with world up: x = t, y = Z × t (horizontal), z = x × y
+  function levelQuat(t) {
+    const f = t.clone().normalize();
+    let l = V(0, 0, 1).cross(f);
+    if (l.lengthSq() < 1e-10) l = V(0, 1, 0); // straight up/down: heading is undefined, pick one
+    l.normalize();
+    const u = f.clone().cross(l);
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(f, l, u));
+  }
+  function arcQuat(q0, t) {
+    return new THREE.Quaternion().setFromUnitVectors(fwd(q0), t).multiply(q0);
+  }
+
+  // ---------- scene ----------
+  const stage = $("stage");
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  camera.up.set(0, 0, 1);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  function resetView() { camera.position.set(6.6, -6.0, 4.4); controls.target.set(0, 0, 0.25); controls.update(); }
+  resetView();
+
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 0.85);
+  hemi.position.set(0, 0, 1);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+  sun.position.set(4, -3, 6);
+  scene.add(sun);
+
+  const colors = {};
+  function readColors() {
+    ["--ax-x", "--ax-y", "--ax-z", "--target", "--bad", "--tr-euler", "--tr-slerp", "--tr-track",
+     "--scene-bg", "--scene-grid", "--scene-grid2", "--scene-sphere", "--scene-ring", "--scene-body"].forEach((n) => { colors[n] = css(n); });
+    colors.X = colors["--ax-x"]; colors.Y = colors["--ax-y"]; colors.Z = colors["--ax-z"];
+  }
+  readColors();
+
+  function label(text, color, size = 0.34) {
+    const c = document.createElement("canvas"); c.width = c.height = 128;
+    const g = c.getContext("2d");
+    g.font = "600 84px 'IBM Plex Mono', Consolas, monospace";
+    g.fillStyle = color; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(text, 64, 70);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+    s.scale.set(size, size, 1);
+    return s;
+  }
+  function arrow(dir, len, color, r = 0.028, head = 0.16) {
+    const g = new THREE.Group();
+    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len - head, 12), m);
+    sh.position.y = (len - head) / 2;
+    const hd = new THREE.Mesh(new THREE.ConeGeometry(r * 2.6, head, 18), m);
+    hd.position.y = len - head / 2;
+    g.add(sh, hd);
+    g.quaternion.setFromUnitVectors(V(0, 1, 0), dir.clone().normalize());
+    g.userData.mat = m;
+    return g;
+  }
+
+  // Themed scenery (rebuilt on theme change)
+  let scenery = null;
+  const sphereGroup = new THREE.Group();
+  scene.add(sphereGroup);
+  function buildScenery() {
+    if (scenery) { scene.remove(scenery); scenery.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+    scene.background = new THREE.Color(colors["--scene-bg"]);
+    scenery = new THREE.Group();
+    const grid = new THREE.GridHelper(8, 16, colors["--scene-grid"], colors["--scene-grid2"]);
+    grid.rotation.x = Math.PI / 2;
+    scenery.add(grid);
+    ["X", "Y", "Z"].forEach((a) => {
+      const geo = new THREE.BufferGeometry().setFromPoints([V(0, 0, 0), AXV[a].clone().multiplyScalar(3.4)]);
+      scenery.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: colors[a], transparent: true, opacity: 0.55 })));
+      const l = label(a, colors[a]);
+      l.position.copy(AXV[a]).multiplyScalar(3.62);
+      scenery.add(l);
+    });
+    scene.add(scenery);
+
+    sphereGroup.clear();
+    const faint = new THREE.LineBasicMaterial({ color: colors["--scene-sphere"], transparent: true, opacity: 0.18 });
+    const strong = new THREE.LineBasicMaterial({ color: colors["--scene-sphere"], transparent: true, opacity: 0.45 });
+    for (let lat = -60; lat <= 60; lat += 30) {
+      const pts = [];
+      for (let k = 0; k <= 96; k++) {
+        const a = (k / 96) * Math.PI * 2, e = lat * D2R;
+        pts.push(V(Math.cos(e) * Math.cos(a), Math.cos(e) * Math.sin(a), Math.sin(e)).multiplyScalar(RS));
+      }
+      sphereGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lat === 0 ? strong : faint));
+    }
+    for (let lon = 0; lon < 180; lon += 30) {
+      const pts = [];
+      for (let k = 0; k <= 96; k++) {
+        const e = (k / 96) * Math.PI * 2, a = lon * D2R;
+        pts.push(V(Math.cos(e) * Math.cos(a), Math.cos(e) * Math.sin(a), Math.sin(e)).multiplyScalar(RS));
+      }
+      sphereGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), faint));
+    }
+  }
+
+  // Gimbal chain: g1 turns about world axis a, g2 about its local b, g3 about its local c. The body rides in g3.
+  const g1 = new THREE.Group(), g2 = new THREE.Group(), g3 = new THREE.Group();
+  scene.add(g1); g1.add(g2); g2.add(g3);
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.45, metalness: 0.25 });
+  let gimParts = [], pinMats = [];
+  function buildGimbal() {
+    gimParts.forEach((p) => { p.parent.remove(p); p.geometry.dispose(); });
+    gimParts = []; pinMats = [];
+    const [a, b, c] = S.order.split("");
+    const spec = [[g1, 2.05, c, a], [g2, 1.85, a, b], [g3, 1.65, b, c]]; // [group, radius, ring normal, pivot axis]
+    spec.forEach(([grp, r, n, piv]) => {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.03, 12, 160), ringMat);
+      ring.quaternion.setFromUnitVectors(V(0, 0, 1), AXV[n]);
+      const pm = new THREE.MeshStandardMaterial({ color: colors[piv], roughness: 0.4 });
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2 * r + 0.3, 12), pm);
+      pin.quaternion.setFromUnitVectors(V(0, 1, 0), AXV[piv]);
+      pin.userData.axis = piv;
+      grp.add(ring, pin);
+      gimParts.push(ring, pin); pinMats.push(pm);
+    });
+    applyVisibility();
+  }
+
+  // Body: a small airframe so roll is visible, plus its own axes
+  const body = new THREE.Group();
+  g3.add(body);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.55, metalness: 0.1 });
+  const fus = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 1.3, 24), bodyMat);
+  fus.rotation.z = -Math.PI / 2;
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.32, 24), bodyMat);
+  nose.rotation.z = -Math.PI / 2; nose.position.x = 0.81;
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.35, 0.035), bodyMat);
+  wing.position.x = -0.05;
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.035, 0.38), bodyMat);
+  fin.position.set(-0.5, 0, 0.26);
+  body.add(fus, nose, wing, fin);
+  const bx = arrow(V(1, 0, 0), 1.45, 0xff0000, 0.03), by = arrow(V(0, 1, 0), 1.0, 0x00ff00, 0.03), bz = arrow(V(0, 0, 1), 1.0, 0x0000ff, 0.03);
+  body.add(bx, by, bz);
+  const noseRayMat = new THREE.LineDashedMaterial({ color: 0xff0000, dashSize: 0.09, gapSize: 0.06 });
+  const noseRay = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(1.45, 0, 0), V(RS, 0, 0)]), noseRayMat);
+  noseRay.computeLineDistances();
+  const noseDotMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const noseDot = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), noseDotMat);
+  noseDot.position.x = RS;
+  body.add(noseRay, noseDot);
+
+  // Target: arrow along local x, rotated onto t
+  const tgtG = new THREE.Group();
+  const tArrow = arrow(V(1, 0, 0), RS, 0xffaa00, 0.034, 0.22);
+  const tRingMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+  const tRing = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.018, 8, 48), tRingMat);
+  tRing.rotation.y = Math.PI / 2; tRing.position.x = RS;
+  tgtG.add(tArrow, tRing);
+  scene.add(tgtG);
+
+  // Trails of the nose tip on the pointing sphere
+  function makeTrail(key) {
+    const N = 3000, pos = new Float32Array(N * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setDrawRange(0, 0);
+    const lm = new THREE.LineBasicMaterial({ color: 0xffffff });
+    const pm = new THREE.PointsMaterial({ color: 0xffffff, size: 3, sizeAttenuation: false });
+    const line = new THREE.Line(geo, lm), pts = new THREE.Points(geo, pm);
+    line.frustumCulled = pts.frustumCulled = false;
+    scene.add(line, pts);
+    const tr = {
+      key, n: 0, last: null,
+      recolor() { lm.color.set(colors[key]); pm.color.set(colors[key]); },
+      push(v) {
+        if (this.last && this.last.distanceToSquared(v) < 0.0006) return;
+        if (this.n >= N) { pos.copyWithin(0, 3); this.n = N - 1; }
+        pos[this.n * 3] = v.x; pos[this.n * 3 + 1] = v.y; pos[this.n * 3 + 2] = v.z;
+        this.n++; this.last = v.clone();
+        geo.attributes.position.needsUpdate = true;
+        geo.setDrawRange(0, this.n);
+      },
+      clear() { this.n = 0; this.last = null; geo.setDrawRange(0, 0); }
+    };
+    return tr;
+  }
+  const trails = { euler: makeTrail("--tr-euler"), slerp: makeTrail("--tr-slerp"), track: makeTrail("--tr-track") };
+
+  function applyTheme() {
+    readColors();
+    buildScenery();
+    ringMat.color.set(colors["--scene-ring"]);
+    bodyMat.color.set(colors["--scene-body"]);
+    bx.userData.mat.color.set(colors.X); by.userData.mat.color.set(colors.Y); bz.userData.mat.color.set(colors.Z);
+    noseRayMat.color.set(colors.X); noseDotMat.color.set(colors.X);
+    tArrow.userData.mat.color.set(colors["--target"]); tRingMat.color.set(colors["--target"]);
+    Object.values(trails).forEach((t) => t.recolor());
+    buildGimbal();
+    dirty = true;
+  }
+
+  function applyVisibility() {
+    const g = $("showGimbal").checked;
+    gimParts.forEach((p) => { p.visible = g; });
+    sphereGroup.visible = $("showSphere").checked;
+  }
+
+  // ---------- pose ----------
+  let recTrail = null;
+  function applyPose(angRaw) {
+    const ang = angRaw || S.ang;
+    const [a, b, c] = S.order.split("");
+    g1.quaternion.setFromAxisAngle(AXV[a], ang[0] * D2R);
+    g2.quaternion.setFromAxisAngle(AXV[b], ang[1] * D2R);
+    g3.quaternion.setFromAxisAngle(AXV[c], ang[2] * D2R);
+    const t = tgt();
+    tgtG.quaternion.setFromUnitVectors(V(1, 0, 0), t);
+    if (recTrail) recTrail.push(fwd(qFromAng(S.order, ang)).multiplyScalar(RS * 1.004));
+    const margin = 90 - Math.abs(ang[1]);
+    const lock = margin < 6;
+    pinMats.forEach((m, i) => {
+      const axis = S.order[i];
+      m.color.set(lock && i !== 1 ? colors["--bad"] : colors[axis]);
+    });
+  }
+
+  // ---------- UI ----------
+  const slid = [0, 1, 2].map((i) => $("a" + i)), nums = [0, 1, 2].map((i) => $("n" + i));
+  function primeName(i, a) {
+    const l = a.toLowerCase();
+    return i === 0 ? "world " + a : "body " + l + (i === 1 ? "′" : "″");
+  }
+  function labelAngles() {
+    const ax = S.order.split("");
+    ax.forEach((a, i) => {
+      $("lab" + i).innerHTML = "<b class='c" + a.toLowerCase() + "'>" + (i + 1) + " · " + ROLE[a] + " " + SYM[a] + "</b><small>about " + primeName(i, a) + "</small>";
+    });
+    const [a, b, c] = ax;
+    $("orderNote").innerHTML = "R = R<sub>" + a + "</sub>(" + SYM[a] + ") · R<sub>" + b + "</sub>(" + SYM[b] + ") · R<sub>" + c + "</sub>(" + SYM[c] + ")." +
+      " Rotate about world " + a + ", then about the body's new " + b.toLowerCase() + "′, then about " + c.toLowerCase() + "″." +
+      " The same matrix is also a rotation about the <b>fixed</b> world axes in reverse order: " + c + ", then " + b + ", then " + a + "." +
+      " Switching sequence keeps the orientation and changes the numbers.";
+  }
+  function setPressed(seg, v) { seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
+
+  function syncInputs() {
+    const act = document.activeElement;
+    S.ang.forEach((v, i) => {
+      slid[i].value = v;
+      if (act !== nums[i]) nums[i].value = v.toFixed(1);
+    });
+    $("tAz").value = S.tAz; $("tEl").value = S.tEl;
+    if (act !== $("tAzN")) $("tAzN").value = S.tAz.toFixed(1);
+    if (act !== $("tElN")) $("tElN").value = S.tEl.toFixed(1);
+  }
+
+  function readouts() {
+    const q = curQ(), f = fwd(q), t = tgt();
+    const err = Math.acos(clamp(f.dot(t), -1, 1)) * R2D;
+    $("hudErr").textContent = fmt(err, 1) + "°";
+    const pill = $("pill");
+    if (err < 0.5) { pill.className = "pill good"; pill.textContent = "On target"; }
+    else if (err < 5) { pill.className = "pill warn"; pill.textContent = "Close · " + fmt(err, 2) + "°"; }
+    else { pill.className = "pill bad"; pill.textContent = "Off by " + fmt(err, 1) + "°"; }
+    $("tVec").textContent = "t = " + fv(t);
+    $("fVec").textContent = fv(f);
+    const tb = t.clone().applyQuaternion(q.clone().invert());
+    $("tBody").textContent = fv(tb);
+    $("bearing").textContent = "az " + fmt(Math.atan2(tb.y, tb.x) * R2D) + "°, el " + fmt(Math.atan2(tb.z, Math.hypot(tb.x, tb.y)) * R2D) + "°";
+    const qq = q.w < 0 ? new THREE.Quaternion(-q.x, -q.y, -q.z, -q.w) : q;
+    $("quat").textContent = "(" + [qq.w, qq.x, qq.y, qq.z].map((x) => fmt(x, 3)).join(", ") + ")";
+    const ang = 2 * Math.acos(clamp(qq.w, -1, 1)), s = Math.sin(ang / 2);
+    $("axang").textContent = s < 1e-6 ? "0° (identity)" : fmt(ang * R2D) + "° about " + fv(V(qq.x / s, qq.y / s, qq.z / s), 2);
+    const margin = 90 - Math.abs(S.ang[1]);
+    const gm = $("gmText"), bar = $("gmBar");
+    gm.textContent = fmt(margin) + "°" + (margin < 6 ? " · LOCK" : margin < 20 ? " · near lock" : "");
+    gm.style.color = margin < 6 ? "var(--bad)" : margin < 20 ? "var(--warn)" : "";
+    bar.style.width = (margin / 90 * 100) + "%";
+    bar.style.background = margin < 6 ? "var(--bad)" : margin < 20 ? "var(--warn)" : "var(--good)";
+    const m = new THREE.Matrix4().makeRotationFromQuaternion(q).elements;
+    $("mat").innerHTML = ["X", "Y", "Z"].map((r, i) =>
+      "<tr><td>world " + r + "</td><td>" + fmt(m[i], 3) + "</td><td>" + fmt(m[4 + i], 3) + "</td><td>" + fmt(m[8 + i], 3) + "</td></tr>").join("");
+
+    // closed form for Z-Y-X, plus the selected sequence
+    const psi = Math.atan2(t.y, t.x) * R2D, th = -Math.asin(clamp(t.z, -1, 1)) * R2D;
+    let txt = "Closed form, Z-Y′-X″ with roll = 0\n" +
+      "ψ = atan2(t_y, t_x)  = " + fmt(psi, 1) + "°\n" +
+      "θ = −asin(t_z)       = " + fmt(th, 1) + "°\n" +
+      "φ = 0  (free: pointing fixes only 2 angles)";
+    if (S.order !== "ZYX") {
+      const la = angFromQ(S.order, levelQuat(t));
+      txt += "\n\nSelected " + S.order.split("").join("-") + " sequence, same level frame:\n" +
+        S.order.split("").map((a, i) => SYM[a] + " = " + fmt(la[i], 1) + "°").join("   ");
+    }
+    if (Math.abs(t.z) > 0.999) txt += "\n\nt is almost vertical: heading ψ is undefined.";
+    $("formula").textContent = txt;
+
+    // HUD caption: sequence step, or lock warning
+    const cap = $("cap");
+    if (anim && anim.type === "seq") {
+      cap.hidden = false; cap.className = "cap"; cap.innerHTML = anim.caption;
+    } else if (margin < 6) {
+      cap.hidden = false; cap.className = "cap lock";
+      cap.innerHTML = "<b>Gimbal lock.</b> Angle 2 is " + fmt(S.ang[1]) + "°, so the 1st and 3rd axes are only " + fmt(margin) + "° apart. Sliders 1 and 3 now turn the body about almost the same axis, and one rotational direction is unreachable through the angles.";
+    } else cap.hidden = true;
+  }
+
+  // ---------- animation ----------
+  let anim = null, dirty = true;
+  const ease = (u) => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+
+  function startSolve(kind) {
+    S.track = false; $("track").checked = false;
+    const q0 = curQ(), t = tgt();
+    const q1 = kind === "level" ? levelQuat(t) : arcQuat(q0, t);
+    const a0 = S.ang.slice(), a1 = angFromQ(S.order, q1);
+    a1[0] = a0[0] + wrap(a1[0] - a0[0]);   // turn the short way round for angles 1 and 3
+    a1[2] = a0[2] + wrap(a1[2] - a0[2]);
+    const minBody = q0.angleTo(q1) * R2D;
+    const minNose = Math.acos(clamp(fwd(q0).dot(fwd(q1)), -1, 1)) * R2D;
+    const dur = 900 + Math.max(minBody, Math.abs(a1[0] - a0[0]), Math.abs(a1[2] - a0[2])) * 9;
+    trails[S.interp].clear();
+    recTrail = trails[S.interp];
+    anim = { type: "interp", mode: S.interp, kind, q0, q1, a0, a1, t0: performance.now(), dur, minBody, minNose,
+      noseLen: 0, bodyLen: 0, prevF: fwd(q0), prevQ: q0.clone() };
+    $("result").textContent = "Moving…";
+  }
+  function stepInterp(now) {
+    const u = clamp((now - anim.t0) / anim.dur, 0, 1), s = ease(u);
+    let q, angRaw;
+    if (anim.mode === "euler") {
+      angRaw = anim.a0.map((v, i) => v + (anim.a1[i] - v) * s);
+      q = qFromAng(S.order, angRaw);
+    } else {
+      q = anim.q0.clone().slerp(anim.q1, s);
+      angRaw = angFromQ(S.order, q);
+    }
+    S.ang = angRaw.map((v, i) => i === 1 ? v : wrap(v));
+    const f = fwd(q);
+    anim.noseLen += Math.acos(clamp(anim.prevF.dot(f), -1, 1)) * R2D;
+    anim.bodyLen += anim.prevQ.angleTo(q) * R2D;
+    anim.prevF = f; anim.prevQ = q.clone();
+    if (u >= 1) {
+      const a = anim;
+      $("result").innerHTML = (a.mode === "euler" ? "Euler-angle interpolation: " : "Slerp: ") +
+        "nose swept <b>" + fmt(a.noseLen) + "°</b> (great-circle minimum " + fmt(a.minNose) + "°), body turned <b>" + fmt(a.bodyLen) + "°</b> (minimum " + fmt(a.minBody) + "°).";
+      anim = null; recTrail = null;
+    }
+    return angRaw;
+  }
+
+  function startSequence() {
+    S.track = false; $("track").checked = false;
+    recTrail = null;
+    anim = { type: "seq", target: S.ang.slice(), t0: performance.now(), caption: "" };
+  }
+  function stepSequence(now) {
+    const per = 1300, gap = 250, el = now - anim.t0;
+    const ang = [0, 0, 0], ax = S.order.split("");
+    let step = 0;
+    for (let i = 0; i < 3; i++) {
+      const start = i * (per + gap), u = clamp((el - start) / per, 0, 1);
+      ang[i] = anim.target[i] * ease(u);
+      if (el >= start) step = i;
+    }
+    const a = ax[step];
+    anim.caption = "<b>Step " + (step + 1) + " of 3.</b> Rotate " + fmt(anim.target[step]) + "° about " + primeName(step, a) +
+      (step === 0 ? ". The body and world frames still coincide." : ", the axis as it sits after " + (step === 1 ? "step 1." : "steps 1 and 2."));
+    S.ang = ang;
+    if (el > 3 * per + 2 * gap + 900) { anim = null; S.ang = ang; }
+  }
+
+  function stepTracking(dt) {
+    const t = tgt();
+    if (S.law === "vector") {
+      const q = curQ(), f = fwd(q);
+      const err = Math.acos(clamp(f.dot(t), -1, 1));
+      if (err > 1e-5) {
+        let axis = f.clone().cross(t);
+        if (axis.lengthSq() < 1e-12) axis = V(0, 0, 1).applyQuaternion(q);
+        axis.normalize();
+        const rate = Math.min(S.gain * err, MAX_RATE * D2R);
+        const nq = new THREE.Quaternion().setFromAxisAngle(axis, Math.min(rate * dt, err)).multiply(q);
+        S.ang = angFromQ(S.order, nq);
+      }
+    } else {
+      const sp = angFromQ(S.order, levelQuat(t));
+      S.ang = S.ang.map((v, i) => {
+        const e = i === 1 ? sp[i] - v : wrap(sp[i] - v);
+        const d = clamp(S.gain * e * dt, -MAX_RATE * dt, MAX_RATE * dt);
+        return i === 1 ? clamp(v + d, -90, 90) : wrap(v + d);
+      });
+    }
+  }
+
+  function stepTarget(dt) {
+    if (S.move === "circle") { S.tAz = wrap(S.tAz + 30 * dt); }
+    else if (S.move === "zenith") {
+      if (!S.sweep) {
+        const a = S.tAz * D2R;
+        S.sweep = { h: V(Math.cos(a), Math.sin(a), 0), s: Math.max(0, S.tEl) * D2R };
+      }
+      S.sweep.s += 24 * D2R * dt;
+      if (S.sweep.s > Math.PI) S.sweep.s -= Math.PI;  // restart from the horizon on the opposite side
+      const s = S.sweep.s;
+      setTargetVec(S.sweep.h.clone().multiplyScalar(Math.cos(s)).add(V(0, 0, Math.sin(s))));
+      if (s > Math.PI * 0.94) { S.sweep.h.negate(); S.sweep.s = 0.12; }
+    }
+  }
+
+  // ---------- events ----------
+  function userAngle(i, v) {
+    if (anim) { anim = null; recTrail = null; }
+    if (!isFinite(v)) return;
+    S.ang[i] = i === 1 ? clamp(v, -90, 90) : wrap(v);
+    dirty = true;
+  }
+  slid.forEach((s, i) => s.addEventListener("input", () => userAngle(i, parseFloat(s.value))));
+  nums.forEach((n, i) => n.addEventListener("input", () => userAngle(i, parseFloat(n.value))));
+  function userTarget(az, el) {
+    if (az !== null && isFinite(az)) S.tAz = wrap(az);
+    if (el !== null && isFinite(el)) S.tEl = clamp(el, -90, 90);
+    S.sweep = null;
+    dirty = true;
+  }
+  $("tAz").addEventListener("input", (e) => userTarget(parseFloat(e.target.value), null));
+  $("tEl").addEventListener("input", (e) => userTarget(null, parseFloat(e.target.value)));
+  $("tAzN").addEventListener("input", (e) => userTarget(parseFloat(e.target.value), null));
+  $("tElN").addEventListener("input", (e) => userTarget(null, parseFloat(e.target.value)));
+  $("tRand").addEventListener("click", () => userTarget(Math.round(Math.random() * 360 - 180), Math.round(Math.asin(Math.random() * 1.6 - 0.8) * R2D)));
+  $("tUp").addEventListener("click", () => userTarget(S.tAz, 88));
+  $("tBehind").addEventListener("click", () => {
+    const f = fwd(curQ()).negate();
+    S.tEl = Math.asin(clamp(f.z, -1, 1)) * R2D;
+    if (Math.hypot(f.x, f.y) > 1e-6) S.tAz = Math.atan2(f.y, f.x) * R2D;
+    S.sweep = null; dirty = true;
+  });
+  $("order").addEventListener("change", (e) => {
+    const q = curQ();
+    anim = null; recTrail = null;
+    S.order = e.target.value;
+    S.ang = angFromQ(S.order, q);
+    labelAngles(); buildGimbal(); dirty = true;
+  });
+  $("zero").addEventListener("click", () => { anim = null; recTrail = null; S.track = false; $("track").checked = false; S.ang = [0, 0, 0]; dirty = true; });
+  $("play").addEventListener("click", startSequence);
+  $("solveLevel").addEventListener("click", () => startSolve("level"));
+  $("solveArc").addEventListener("click", () => startSolve("arc"));
+  $("interpSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.interp = b.dataset.v; setPressed($("interpSeg"), S.interp); });
+  $("lawSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.law = b.dataset.v; setPressed($("lawSeg"), S.law); trails.track.clear(); });
+  $("moveSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.move = b.dataset.v; S.sweep = null; setPressed($("moveSeg"), S.move); });
+  $("track").addEventListener("change", (e) => {
+    S.track = e.target.checked;
+    if (S.track) { anim = null; trails.track.clear(); recTrail = trails.track; } else recTrail = null;
+  });
+  $("gain").addEventListener("input", (e) => { S.gain = parseFloat(e.target.value); $("gainN").value = S.gain.toFixed(1); });
+  $("gainN").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (isFinite(v)) { S.gain = clamp(v, 0.3, 8); $("gain").value = S.gain; } });
+  $("showGimbal").addEventListener("change", applyVisibility);
+  $("showSphere").addEventListener("change", applyVisibility);
+  $("clearTrails").addEventListener("click", () => { Object.values(trails).forEach((t) => t.clear()); $("result").textContent = ""; });
+  $("resetView").addEventListener("click", resetView);
+
+  new ResizeObserver(() => {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }).observe(stage);
+
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (mq.addEventListener) mq.addEventListener("change", applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---------- boot ----------
+  $("order").value = S.order;
+  $("gain").value = S.gain; $("gainN").value = S.gain.toFixed(1);
+  labelAngles();
+  applyTheme();
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    let angRaw = null;
+    if (S.move !== "off") { stepTarget(dt); dirty = true; }
+    if (anim && anim.type === "interp") { angRaw = stepInterp(now); dirty = true; }
+    else if (anim && anim.type === "seq") { stepSequence(now); dirty = true; }
+    else if (S.track) { stepTracking(dt); dirty = true; }
+    if (dirty) {
+      applyPose(angRaw);
+      syncInputs();
+      readouts();
+      dirty = false;
+    }
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>

@@ -1,0 +1,33 @@
+Goniometer snapshot
+Time:        Fri Oct 16 2026 20:08:22 GMT+0200 (Central European Summer Time)
+Image:       goniometer_design_2_2026-10-16_20-08-21.png
+Arm order:   X arm below Y arm, stage on top
+
+MOTORS (base first, angle · axis at home · limits)
+  Base      99.000°   axis (0.000, 0.000, 1.000)   −180…180°
+  X arm     34.300°   axis (1.000, 0.000, 0.000)   −90…90°
+  Y arm    −67.000°   axis (0.000, 1.000, 0.000)   −90…90°
+  Stage      0.000°   axis (0.000, 0.000, 1.000)   −180…180°
+
+SAMPLE MOUNT
+  Normal offset tilt:   0.00°
+  Offset direction:     0.0°
+
+NORMAL n (lab, Z up)
+  n =                  (0.361475, −0.874727, 0.322782)
+  Polar θ from +Z:     71.169°
+  Azimuth φ from +X:   292.453°
+  In-plane mark:       (0.451218, 0.467068, 0.760427)
+
+RED ARROWS (angles measured in the sample frame: θ from n, φ about n from the mark)
+  d  θ_d = 71.000°,  φ_d = 36.000°
+     d (lab) =         (0.009378, 0.000674, 0.999956)   polar 0.539°, azimuth 4.113°
+     angle n ↔ d:      71.000°
+  e  ψ_e = −66.500° about d,  length = 0.400
+     e direction =     (0.697417, 0.716631, −0.007024)
+     tip of e =        (0.288345, 0.287327, 0.997146)   |tip| = 1.077033
+
+CAMERA
+  position (−2.301, −9.156, 4.984),  target (0.000, 0.000, 0.000)
+
+JSON {"preset":"xyStage","motors":[{"name":"Base","angle":99,"axis":[0,0,1],"min":-180,"max":180},{"name":"X arm","angle":34.3,"axis":[1,0,0],"min":-90,"max":90},{"name":"Y arm","angle":-67,"axis":[0,1,0],"min":-90,"max":90},{"name":"Stage","angle":0,"axis":[0,0,1],"min":-180,"max":180}],"offset":{"tilt":0,"direction":0},"arrows":{"frame":"sample","d":{"theta":71,"phi":36},"e":{"psi":-66.5,"length":0.4}},"normal":[0.3614749839207744,-0.8747270492195798,0.3227823188513944]}

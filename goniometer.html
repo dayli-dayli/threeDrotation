@@ -1,0 +1,874 @@
+<title>Goniometer Normal Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: instrument bench — 3D goniometer on the left, motor rack and readout on the right; stacks on phones. */
+:root {
+  --bg: #e8edf0; --panel: #f6f8f9; --raised: #ffffff; --fg: #14202a; --muted: #55646e; --line: #d0d9df;
+  --accent: #0d6e6a; --accent-fg: #ffffff; --normal: #2563d8; --inplane: #d07c00;
+  --m1: #7c4dde; --m2: #0f9a8f; --m3: #d0457f; --m4: #7f8f13;
+  --trail: #2563d8; --second: #d9453f; --third: #9e1f1a;
+  --scene-bg: #e1e8ec; --scene-grid: #bccad3; --scene-grid2: #d2dce2; --scene-sphere: #7a8c99; --scene-body: #c4cfd7; --scene-sample: #9aa9b4;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1215; --panel: #131a1f; --raised: #1a232a; --fg: #e1e8ed; --muted: #8b9ba6; --line: #26323b;
+  --accent: #3fb5ad; --accent-fg: #062220; --normal: #5f95ff; --inplane: #f2a32b;
+  --m1: #a183ff; --m2: #34c3b6; --m3: #f06ba5; --m4: #b5c63a;
+  --trail: #5f95ff; --second: #f0605a; --third: #ff9e95;
+  --scene-bg: #0a0f12; --scene-grid: #24323c; --scene-grid2: #17222a; --scene-sphere: #6b7e8b; --scene-body: #56666f; --scene-sample: #6f808c;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d1215; --panel: #131a1f; --raised: #1a232a; --fg: #e1e8ed; --muted: #8b9ba6; --line: #26323b;
+  --accent: #3fb5ad; --accent-fg: #062220; --normal: #5f95ff; --inplane: #f2a32b;
+  --m1: #a183ff; --m2: #34c3b6; --m3: #f06ba5; --m4: #b5c63a;
+  --trail: #5f95ff; --second: #f0605a; --third: #ff9e95;
+  --scene-bg: #0a0f12; --scene-grid: #24323c; --scene-grid2: #17222a; --scene-sphere: #6b7e8b; --scene-body: #56666f; --scene-sample: #6f808c;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); }
+.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; padding: 16px; }
+
+.stage { position: relative; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--scene-bg); }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud { position: absolute; pointer-events: none; font-family: var(--f-mono); font-size: 12px; color: var(--fg); }
+.hud-tl { top: 14px; left: 14px; right: 14px; display: grid; gap: 6px; justify-items: start; }
+.big { font: 600 34px/1 var(--f-display); font-variant-numeric: tabular-nums; display: flex; gap: 18px; flex-wrap: wrap; }
+.big small { font: 500 12px/1 var(--f-mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; display: block; margin-bottom: 4px; }
+.big .vec { font: 500 13px/1.3 var(--f-mono); color: var(--muted); align-self: end; }
+.hud-bl { left: 14px; bottom: 12px; right: 14px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.hud-bl span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.hud-br { right: 14px; top: 14px; color: var(--muted); text-align: right; }
+
+.panel { min-width: 0; min-height: 0; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 24px; display: flex; flex-direction: column; gap: 18px; }
+.brand h1 { font: 700 26px/1.05 var(--f-display); margin: 0 0 6px; text-wrap: balance; }
+.brand p { margin: 0; color: var(--muted); font-size: 13px; }
+.cn { color: var(--normal); } .ci { color: var(--inplane); } .cs { color: var(--second); } .ce { color: var(--third); }
+.group { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.group h2 { margin: 0; font: 600 13px/1 var(--f-display); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.row { display: grid; grid-template-columns: 6.6rem minmax(0, 1fr) 4.8rem; align-items: center; gap: 10px; }
+.row label { font-size: 13px; line-height: 1.2; }
+.row label small { display: block; color: var(--muted); font-size: 11px; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+input[type=number], input[type=text], select { width: 100%; font: 13px var(--f-mono); color: var(--fg); background: var(--raised); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; font-variant-numeric: tabular-nums; min-width: 0; }
+select { font-family: var(--f-body); padding: 6px 8px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: 500 13px var(--f-body); color: var(--fg); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.note { margin: 0; font-size: 12.5px; color: var(--muted); }
+.note b { color: var(--fg); font-weight: 500; }
+.formula { margin: 0; font: 12.5px/1.6 var(--f-mono); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px; overflow-x: auto; white-space: pre; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--raised); flex-wrap: wrap; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 6px 10px; font-size: 12.5px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.switch { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.switch input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+.stack { display: flex; flex-direction: column; }
+.end { font: 500 11px var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 4px 0; }
+.axis { border-left: 3px solid var(--c); padding: 8px 0 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.axis + .axis { border-top: 1px dashed var(--line); }
+.axis-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.axis-head .nm { font: 600 16px/1 var(--f-display); color: var(--c); }
+.axis-head .meta { font: 11.5px var(--f-mono); color: var(--muted); flex: 1; min-width: 0; }
+.axis .row2 { display: grid; grid-template-columns: minmax(0, 1fr) 4.8rem; gap: 10px; align-items: center; }
+.axis .row2 input[type=range] { accent-color: var(--c); }
+.axis details summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+.edit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; padding-top: 8px; }
+.edit label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); min-width: 0; }
+.edit .wide { grid-column: span 3; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; font-size: 12.5px; align-items: baseline; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+
+@media (max-width: 880px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 62vh; min-height: 340px; max-height: 560px; }
+  .panel { overflow: visible; }
+  .big { font-size: 26px; }
+  .hud-br { display: none; }
+}
+@media (max-width: 420px) { .row { grid-template-columns: 5.4rem minmax(0, 1fr) 4.2rem; gap: 8px; } }
+</style>
+
+<div class="app">
+  <section class="stage" id="stage" aria-label="3D goniometer view">
+    <div class="hud hud-tl">
+      <div class="big">
+        <div><small>Normal θ (polar)</small><span id="hudTh">—</span></div>
+        <div><small>Normal φ (azimuth)</small><span id="hudPh">—</span></div>
+        <div class="vec" id="hudVec"></div>
+      </div>
+    </div>
+    <div class="hud hud-br">Drag to orbit · scroll to zoom · right-drag to pan</div>
+    <div class="hud hud-bl">
+      <span><i class="sw" style="background:var(--normal)"></i>sample normal n</span>
+      <span><i class="sw" style="background:var(--second)"></i>arrow d (unit)</span>
+      <span><i class="sw" style="background:var(--third)"></i>arrow e (from tip of d)</span>
+      <span><i class="sw" style="background:var(--inplane)"></i>in-plane mark</span>
+      <span><i class="sw" style="background:var(--m2)"></i><i class="sw" style="background:var(--m4)"></i>path of n if only that motor turns</span>
+      <span><i class="sw" style="background:var(--m3)"></i>spin about n</span>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <header class="brand">
+      <h1>Goniometer Normal Viewer</h1>
+      <p>Set the base, arm and spin angles to see where the sample's surface <b class="cn">normal n</b> points in the lab frame (Z up). Angles are positive by the right-hand rule: looking down the axis vector toward the sample, positive turns counter-clockwise. n is a unit vector, so its tip sits on the unit sphere.</p>
+    </header>
+
+    <section class="group">
+      <h2>Instrument</h2>
+      <p class="note" id="presetNote"></p>
+      <div class="stack">
+        <div class="end">Base · fixed to the lab</div>
+        <div id="axes"></div>
+        <div class="end">Sample · spins about its own normal</div>
+      </div>
+      <div class="btns"><button id="homeAll">Home all motors (0°)</button></div>
+      <p class="note">Open <b>Axis setup</b> to set travel limits. If your controller counts the other way, use <b>Flip sign</b>.</p>
+    </section>
+
+    <section class="group">
+      <h2>Normal direction</h2>
+      <dl class="kv" id="state"></dl>
+      <pre class="formula" id="formula"></pre>
+    </section>
+
+    <section class="group">
+      <h2>Sample mount</h2>
+      <div class="row"><label for="offT">Normal offset<small>miscut or wedge</small></label><input type="range" id="offT" min="0" max="20" step="0.1"><input type="number" id="offTN" min="0" max="20" step="0.1" aria-label="Offset tilt degrees"></div>
+      <div class="row"><label for="offA">Offset direction<small>azimuth on the mount</small></label><input type="range" id="offA" min="-180" max="180" step="1"><input type="number" id="offAN" min="-180" max="180" step="1" aria-label="Offset direction degrees"></div>
+      <p class="note">At 0 the surface normal lies along the Y arm's Z direction. An offset tilts it away from that direction by the given angle, toward the given azimuth. The spin motor always turns the sample about its tilted normal.</p>
+    </section>
+
+    <section class="group">
+      <h2>Red arrows</h2>
+      <label class="switch"><input type="checkbox" id="showSec" checked> Show <b class="cs">d</b> and <b class="ce">e</b></label>
+      <div class="field">Directions are measured in
+        <div class="seg" id="secFrameSeg" role="group" aria-label="Red arrow frame">
+          <button data-v="sample" aria-pressed="true">Sample frame (rides with motors)</button>
+          <button data-v="lab" aria-pressed="false">Lab frame (fixed)</button>
+        </div>
+      </div>
+      <div class="end cs">Arrow d · unit length, from the origin</div>
+      <div class="row"><label for="secT" id="secTLab"></label><input type="range" id="secT" min="0" max="180" step="0.5"><input type="number" id="secTN" min="0" max="180" step="0.5" aria-label="Arrow d polar degrees"></div>
+      <div class="row"><label for="secA" id="secALab"></label><input type="range" id="secA" min="-180" max="180" step="0.5"><input type="number" id="secAN" min="-180" max="180" step="0.5" aria-label="Arrow d azimuth degrees"></div>
+      <div class="btns"><button id="secAlign">Align d with n</button></div>
+      <div class="end ce">Arrow e · from the tip of d, perpendicular to d</div>
+      <div class="row"><label for="terP">Angle ψ<sub>e</sub><small>turn about d</small></label><input type="range" id="terP" min="-180" max="180" step="0.5"><input type="number" id="terPN" min="-180" max="180" step="0.5" aria-label="Arrow e angle about d, degrees"></div>
+      <div class="row"><label for="terL">Length<small>less than 1</small></label><input type="range" id="terL" min="0.1" max="0.95" step="0.01"><input type="number" id="terLN" min="0.1" max="0.95" step="0.01" aria-label="Arrow e length"></div>
+      <p class="note" id="secNote"></p>
+    </section>
+
+    <section class="group">
+      <h2>Snapshot</h2>
+      <label class="field" for="snapName">File name prefix
+        <input type="text" id="snapName" value="goniometer" maxlength="40">
+      </label>
+      <div class="btns">
+        <button id="snap">Save snapshot (PNG + TXT)</button>
+        <button id="load">Load snapshot (TXT)</button>
+        <input type="file" id="loadFile" accept=".txt,.json,text/plain,application/json" hidden>
+      </div>
+      <p class="note" id="snapNote">Saves the 3D view as an image and the full angular configuration as a text file, both named with the prefix and a timestamp. Load a saved TXT, or drop it on the 3D view, to restore that configuration.</p>
+    </section>
+
+    <section class="group">
+      <h2>View</h2>
+      <label class="switch"><input type="checkbox" id="showCircles" checked> Per-motor paths of the normal</label>
+      <label class="switch"><input type="checkbox" id="showSphere" checked> Unit sphere grid (10°)</label>
+      <label class="switch"><input type="checkbox" id="showTrail" checked> Trace the normal as it moves</label>
+      <div class="btns"><button id="clearTrail">Clear trace</button><button id="resetView">Reset camera</button></div>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  "use strict";
+  const D2R = Math.PI / 180, R2D = 180 / Math.PI, RS = 2.75, SPEED = 45;
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const $ = (id) => document.getElementById(id);
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const wrap = (x) => ((x + 180) % 360 + 360) % 360 - 180;
+  const wrap360 = (x) => (x % 360 + 360) % 360;
+  const fmt = (x, d = 1) => { const s = Math.abs(x) < 0.5 * Math.pow(10, -d) ? 0 : x; return (s < 0 ? "−" : "") + Math.abs(s).toFixed(d); };
+  const fv = (v, d = 3) => "(" + fmt(v.x, d) + ", " + fmt(v.y, d) + ", " + fmt(v.z, d) + ")";
+  const MCOL = ["--m1", "--m2", "--m3", "--m4"];
+
+  // an axis with `normal: true` turns about the sample normal n_s (in its parent frame); `sign` flips it
+  const PRESET_KEY = "ySpin";
+  const PRESET = [
+    { name: "Base", v: [0, 0, 1], min: -180, max: 180, c: "--m4" },
+    { name: "Y arm", v: [0, 1, 0], min: -90, max: 90, c: "--m2" },
+    { name: "Spin", normal: true, min: -180, max: 180, c: "--m3" }
+  ];
+  const PRESET_NOTE = "The base turns the whole assembly about lab Z. The Y arm rides on it, so its axis is lab Y while the base is at 0, and turns with the base otherwise. The sample sits on the Y arm and spins about its own surface normal n: spin leaves n where it is and turns the in-plane mark (and sample-frame arrows) about n.";
+
+  const S = { axes: [], offT: 0, offA: 0, sec: { frame: "sample", th: 35, ph: 0 }, ter: { ps: 90, len: 0.4 } };
+  function loadPreset() {
+    S.axes = PRESET.map((a) => ({ name: a.name, v: a.v ? a.v.slice() : null, normal: !!a.normal, sign: 1, min: a.min, max: a.max, c: a.c, val: 0 }));
+    $("presetNote").textContent = PRESET_NOTE;
+  }
+
+  // ---------- kinematics: R = R1(θ1)·R2(θ2)·R3(θ3), axes given at home, base first ----------
+  function axisVec(a) {
+    if (a.normal) return sampleNormal().multiplyScalar(a.sign < 0 ? -1 : 1);
+    const v = V(a.v[0], a.v[1], a.v[2]); return v.lengthSq() < 1e-12 ? V(0, 0, 1) : v.normalize();
+  }
+  const qAx = (v, deg) => new THREE.Quaternion().setFromAxisAngle(v, deg * D2R);
+  function chainQ(from, to, vals) {
+    const q = new THREE.Quaternion();
+    for (let i = from; i < to; i++) q.multiply(qAx(axisVec(S.axes[i]), vals[i]));
+    return q;
+  }
+  function sampleNormal() {
+    const t = S.offT * D2R, a = S.offA * D2R;
+    return V(Math.sin(t) * Math.cos(a), Math.sin(t) * Math.sin(a), Math.cos(t));
+  }
+  const curVals = () => S.axes.map((a) => a.val);
+  const normalAt = (vals) => sampleNormal().applyQuaternion(chainQ(0, S.axes.length, vals));
+  const angBetween = (a, b) => Math.acos(clamp(a.dot(b), -1, 1)) * R2D;
+  function spherical(n) {
+    const th = Math.acos(clamp(n.z, -1, 1)) * R2D;
+    const ph = Math.hypot(n.x, n.y) < 1e-9 ? null : wrap360(Math.atan2(n.y, n.x) * R2D);
+    return { th, ph };
+  }
+
+  // ---------- scene ----------
+  const stage = $("stage");
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  camera.up.set(0, 0, 1);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  function resetView() { camera.position.set(7.2, -6.4, 4.6); controls.target.set(0, 0, 0); controls.update(); }
+  resetView();
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 0.85); hemi.position.set(0, 0, 1); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(4, -3, 6); scene.add(sun);
+
+  const C = {};
+  function readColors() {
+    ["--normal", "--inplane", "--trail", "--second", "--third", "--m1", "--m2", "--m3", "--m4", "--muted",
+     "--scene-bg", "--scene-grid", "--scene-grid2", "--scene-sphere", "--scene-body", "--scene-sample"].forEach((n) => { C[n] = css(n); });
+  }
+  readColors();
+  const mkey = (i) => (S.axes[i] && S.axes[i].c) || MCOL[i % 4];
+  const mcol = (i) => C[mkey(i)];
+
+  function label(text, color, size = 0.36) {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 128;
+    const g = c.getContext("2d");
+    g.font = "600 76px 'Barlow Semi Condensed', 'Arial Narrow', sans-serif";
+    g.fillStyle = color; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(text, 128, 68);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+    s.scale.set(size * 2, size, 1);
+    return s;
+  }
+  function arrow(dir, len, color, r = 0.03, head = 0.18) {
+    const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len - head, 12), m); sh.position.y = (len - head) / 2;
+    const hd = new THREE.Mesh(new THREE.ConeGeometry(r * 2.6, head, 18), m); hd.position.y = len - head / 2;
+    g.add(sh, hd);
+    g.quaternion.setFromUnitVectors(V(0, 1, 0), dir.clone().normalize());
+    return g;
+  }
+  function disposeTree(o) {
+    o.traverse((c) => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) { if (c.material.map) c.material.map.dispose(); c.material.dispose(); }
+    });
+  }
+  function perp(e) { const a = Math.abs(e.z) < 0.9 ? V(0, 0, 1) : V(1, 0, 0); return e.clone().cross(a).normalize(); }
+
+  // lab scenery
+  let scenery = null;
+  const sphereGroup = new THREE.Group(); scene.add(sphereGroup);
+  function buildScenery() {
+    if (scenery) { scene.remove(scenery); disposeTree(scenery); }
+    scene.background = new THREE.Color(C["--scene-bg"]);
+    scenery = new THREE.Group();
+    const grid = new THREE.GridHelper(9, 18, C["--scene-grid"], C["--scene-grid2"]);
+    grid.rotation.x = Math.PI / 2; grid.position.z = -2.5;
+    scenery.add(grid);
+    const o = V(2.6, -3.4, -2.5);
+    [["X", V(1, 0, 0)], ["Y", V(0, 1, 0)], ["Z", V(0, 0, 1)]].forEach(([n, d]) => {
+      const a = arrow(d, 0.9, C["--muted"], 0.022, 0.14); a.position.copy(o); scenery.add(a);
+      const l = label("lab " + n, C["--muted"], 0.26); l.position.copy(o).add(d.clone().multiplyScalar(1.15)); scenery.add(l);
+    });
+    scene.add(scenery);
+    sphereGroup.children.slice().forEach((c) => { sphereGroup.remove(c); disposeTree(c); });
+    // unit sphere (drawn at radius RS): a line every 10°, every 30° a little stronger, equator strongest
+    const mat = (opacity) => new THREE.LineBasicMaterial({ color: C["--scene-sphere"], transparent: true, opacity });
+    const fine = mat(0.1), major = mat(0.24), equator = mat(0.45);
+    for (let lat = -80; lat <= 80; lat += 10) {
+      const pts = [];
+      for (let k = 0; k <= 144; k++) { const a = k / 144 * Math.PI * 2, e = lat * D2R; pts.push(V(Math.cos(e) * Math.cos(a), Math.cos(e) * Math.sin(a), Math.sin(e)).multiplyScalar(RS)); }
+      sphereGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lat === 0 ? equator : lat % 30 === 0 ? major : fine));
+    }
+    for (let lon = 0; lon < 180; lon += 10) {
+      const pts = [];
+      for (let k = 0; k <= 144; k++) { const e = k / 144 * Math.PI * 2, a = lon * D2R; pts.push(V(Math.cos(e) * Math.cos(a), Math.cos(e) * Math.sin(a), Math.sin(e)).multiplyScalar(RS)); }
+      sphereGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lon % 30 === 0 ? major : fine));
+    }
+  }
+
+  // motor stack: frames[0] = lab, frames[i+1] = carried by motor i
+  const stackRoot = new THREE.Group(); scene.add(stackRoot);
+  let frames = [stackRoot];
+  function buildStack() {
+    stackRoot.children.slice().forEach((c) => { stackRoot.remove(c); disposeTree(c); });
+    frames = [stackRoot];
+    S.axes.forEach((a, i) => {
+      const parent = frames[i], e = axisVec(a), col = mcol(i), r = a.normal ? 0.8 : 2.15 - 0.3 * i;
+      const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.45, metalness: 0.2 });
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.04, 12, 180), mat);
+      ring.quaternion.setFromUnitVectors(V(0, 0, 1), e);
+      const lbl = label(a.name, col);
+      parent.add(ring, lbl);
+      if (a.normal) {
+        // spin ring sits around the sample, label beside the ring (the normal arrow already marks the axis)
+        lbl.position.copy(perp(e).multiplyScalar(-(r + 0.45)));
+      } else {
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 2 * r + 0.6, 10), mat);
+        rod.quaternion.setFromUnitVectors(V(0, 1, 0), e);
+        lbl.position.copy(e).multiplyScalar(r + 0.55);
+        parent.add(rod);
+      }
+      const child = new THREE.Group(); parent.add(child);
+      const bead = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), mat);
+      bead.position.copy(perp(e).multiplyScalar(r));
+      child.add(bead);
+      frames.push(child);
+    });
+    const top = frames[frames.length - 1];
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.07, 48), new THREE.MeshStandardMaterial({ color: C["--scene-body"], roughness: 0.6 }));
+    plate.rotation.x = Math.PI / 2; plate.position.z = -0.1;
+    // the plate belongs to the arm; a spin motor turns the sample on top of it
+    const lastIsSpin = S.axes.length && S.axes[S.axes.length - 1].normal;
+    frames[frames.length - (lastIsSpin ? 2 : 1)].add(plate);
+    const n = sampleNormal();
+    const slabG = new THREE.Group(); slabG.quaternion.setFromUnitVectors(V(0, 0, 1), n);
+    slabG.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.55, 0.05), new THREE.MeshStandardMaterial({ color: C["--scene-sample"], roughness: 0.3, metalness: 0.3 })));
+    const mark = arrow(V(1, 0, 0), 0.75, C["--inplane"], 0.02, 0.12); mark.position.z = 0.03; slabG.add(mark);
+    top.add(slabG);
+    top.add(arrow(n, RS, C["--normal"], 0.036, 0.24));
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), new THREE.MeshBasicMaterial({ color: C["--normal"] }));
+    dot.position.copy(n).multiplyScalar(RS); top.add(dot);
+    buildCircles();
+    applyVisibility();
+  }
+  // in-plane mark direction in the top-arm frame (x of the tilted slab)
+  // mount: slab frame (x = in-plane mark, z = n) -> lab, at the given motor angles
+  function mountQ(vals) {
+    const tilt = new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), sampleNormal());
+    return chainQ(0, S.axes.length, vals).multiply(tilt);
+  }
+  const inPlaneAt = (vals) => V(1, 0, 0).applyQuaternion(mountQ(vals));
+
+  // red arrows: d (unit, from the origin) and e (from the tip of d). (θ, φ) are in the slab frame or the lab frame.
+  function dirLocal(o) {
+    const t = o.th * D2R, p = o.ph * D2R;
+    return V(Math.sin(t) * Math.cos(p), Math.sin(t) * Math.sin(p), Math.cos(t));
+  }
+  const dirAt = (o, vals) => S.sec.frame === "sample" ? dirLocal(o).applyQuaternion(mountQ(vals)) : dirLocal(o);
+  const secondAt = (vals) => dirAt(S.sec, vals);
+  // e lies in the plane perpendicular to d: ψ = 0 along ê_θ (direction of increasing θ_d), ψ = 90° along ê_φ
+  function perpBasis(o) {
+    const t = o.th * D2R, p = o.ph * D2R;
+    return [V(Math.cos(t) * Math.cos(p), Math.cos(t) * Math.sin(p), -Math.sin(t)), V(-Math.sin(p), Math.cos(p), 0)];
+  }
+  function thirdAt(vals) {
+    const [et, ep] = perpBasis(S.sec), ps = S.ter.ps * D2R;
+    const e = et.multiplyScalar(Math.cos(ps)).addScaledVector(ep, Math.sin(ps));
+    return S.sec.frame === "sample" ? e.applyQuaternion(mountQ(vals)) : e;
+  }
+  function setPsiFromLocal(e) {
+    const [et, ep] = perpBasis(S.sec);
+    S.ter.ps = Math.atan2(e.dot(ep), e.dot(et)) * R2D;
+  }
+  function setDirFromVec(o, v) {
+    o.th = Math.acos(clamp(v.z, -1, 1)) * R2D;
+    if (Math.hypot(v.x, v.y) > 1e-9) o.ph = wrap(Math.atan2(v.y, v.x) * R2D);
+  }
+  const secHolder = new THREE.Group(), terHolder = new THREE.Group(), redGroup = new THREE.Group();
+  redGroup.add(secHolder, terHolder); scene.add(redGroup);
+  function buildSecond() {
+    [secHolder, terHolder].forEach((h) => h.children.slice().forEach((c) => { h.remove(c); disposeTree(c); }));
+    secHolder.add(arrow(V(1, 0, 0), RS, C["--second"], 0.03, 0.22));
+    terHolder.add(arrow(V(1, 0, 0), RS * S.ter.len, C["--third"], 0.026, 0.18));
+  }
+  function updateRed(vals) {
+    const d = secondAt(vals);
+    secHolder.quaternion.setFromUnitVectors(V(1, 0, 0), d);
+    terHolder.position.copy(d).multiplyScalar(RS);
+    terHolder.quaternion.setFromUnitVectors(V(1, 0, 0), thirdAt(vals));
+  }
+
+  // per-motor normal paths
+  const CN = 145;
+  let circles = [];
+  const circleGroup = new THREE.Group(); scene.add(circleGroup);
+  function buildCircles() {
+    circleGroup.children.slice().forEach((c) => { circleGroup.remove(c); disposeTree(c); });
+    circles = S.axes.map((a, i) => {
+      if (a.normal) return null;   // spinning about n leaves n fixed: no path to draw
+      const mk = (opacity, dashed) => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CN * 3), 3));
+        const mat = dashed ? new THREE.LineDashedMaterial({ color: mcol(i), dashSize: 0.06, gapSize: 0.07, transparent: true, opacity })
+                           : new THREE.LineBasicMaterial({ color: mcol(i), transparent: true, opacity });
+        const l = new THREE.Line(geo, mat); l.frustumCulled = false; circleGroup.add(l); return l;
+      };
+      return { full: mk(0.28, true), lim: mk(0.95, false) };
+    });
+  }
+  function updateCircles() {
+    const vals = curVals();
+    S.axes.forEach((a, i) => {
+      const c = circles[i]; if (!c) return;
+      const fill = (line, lo, hi) => {
+        const arr = line.geometry.attributes.position.array;
+        for (let k = 0; k < CN; k++) {
+          const w = vals.slice(); w[i] = lo + (hi - lo) * k / (CN - 1);
+          const p = normalAt(w).multiplyScalar(RS * 1.006);
+          arr[k * 3] = p.x; arr[k * 3 + 1] = p.y; arr[k * 3 + 2] = p.z;
+        }
+        line.geometry.attributes.position.needsUpdate = true;
+        line.computeLineDistances();
+      };
+      fill(c.full, -180, 180);
+      fill(c.lim, a.min, a.min + Math.min(a.max - a.min, 360));
+    });
+  }
+
+  // trace of the normal tip
+  const TN = 6000, trailPos = new Float32Array(TN * 3), trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute("position", new THREE.BufferAttribute(trailPos, 3)); trailGeo.setDrawRange(0, 0);
+  const trailLineMat = new THREE.LineBasicMaterial(), trailPtMat = new THREE.PointsMaterial({ size: 3, sizeAttenuation: false });
+  const trailLine = new THREE.Line(trailGeo, trailLineMat), trailPts = new THREE.Points(trailGeo, trailPtMat);
+  trailLine.frustumCulled = trailPts.frustumCulled = false; scene.add(trailLine, trailPts);
+  const trail = { n: 0, last: null,
+    push(v) {
+      if (this.last && this.last.distanceToSquared(v) < 0.0005) return;
+      if (this.n >= TN) { trailPos.copyWithin(0, 3); this.n = TN - 1; }
+      trailPos.set([v.x, v.y, v.z], this.n * 3); this.n++; this.last = v.clone();
+      trailGeo.attributes.position.needsUpdate = true; trailGeo.setDrawRange(0, this.n);
+    },
+    clear() { this.n = 0; this.last = null; trailGeo.setDrawRange(0, 0); } };
+
+  function applyTheme() {
+    readColors();
+    buildScenery(); buildStack();
+    trailLineMat.color.set(C["--trail"]); trailPtMat.color.set(C["--trail"]);
+    buildSecond();
+    renderAxes();
+    dirty = true;
+  }
+  function applyVisibility() {
+    circleGroup.visible = $("showCircles").checked;
+    sphereGroup.visible = $("showSphere").checked;
+    trailLine.visible = trailPts.visible = $("showTrail").checked;
+    redGroup.visible = $("showSec").checked;
+  }
+
+  // ---------- motor UI ----------
+  function axisMeta(a) { return "about " + (a.normal ? (a.sign < 0 ? "−n" : "n") : fv(axisVec(a), 2)) + " · " + fmt(a.min, 0) + "…" + fmt(a.max, 0) + "°"; }
+  function renderAxes() {
+    const box = $("axes"); box.innerHTML = "";
+    S.axes.forEach((a, i) => {
+      const card = document.createElement("div");
+      card.className = "axis"; card.style.setProperty("--c", "var(" + mkey(i) + ")");
+      card.innerHTML =
+        '<div class="axis-head"><b class="nm" id="nm' + i + '"></b><span class="meta" id="meta' + i + '"></span></div>' +
+        '<div class="row2"><input type="range" id="ar' + i + '" step="0.1"><input type="number" id="an' + i + '" step="0.1"></div>' +
+        '<details><summary>Axis setup</summary><div class="edit">' +
+        '<label class="wide">Name<input type="text" id="enm' + i + '" maxlength="12"></label>' +
+        (a.normal ? '<p class="note wide">Axis is the sample normal n, so it follows the mount offset.</p>' :
+        '<label>Axis x<input type="number" id="ex' + i + '" step="0.05"></label>' +
+        '<label>Axis y<input type="number" id="ey' + i + '" step="0.05"></label>' +
+        '<label>Axis z<input type="number" id="ez' + i + '" step="0.05"></label>') +
+        '<label>Min °<input type="number" id="emin' + i + '" step="1"></label>' +
+        '<label>Max °<input type="number" id="emax' + i + '" step="1"></label>' +
+        '<label>&nbsp;<button id="eflip' + i + '" type="button">Flip sign</button></label>' +
+        "</div></details>";
+      box.appendChild(card);
+      $("nm" + i).textContent = a.name;
+      $("meta" + i).textContent = axisMeta(a);
+      $("ar" + i).setAttribute("aria-label", a.name + " angle");
+      $("an" + i).setAttribute("aria-label", a.name + " angle degrees");
+      $("enm" + i).value = a.name;
+      if (!a.normal) ["x", "y", "z"].forEach((c, k) => { $("e" + c + i).value = a.v[k]; });
+      $("emin" + i).value = a.min; $("emax" + i).value = a.max;
+      setRange(i);
+      $("ar" + i).addEventListener("input", (e) => userAngle(i, parseFloat(e.target.value)));
+      $("an" + i).addEventListener("input", (e) => userAngle(i, parseFloat(e.target.value)));
+      $("enm" + i).addEventListener("input", (e) => {
+        const v = e.target.value.trim(); if (!v) return;
+        a.name = v; $("nm" + i).textContent = v; rebuildSoon();
+      });
+      if (!a.normal) ["x", "y", "z"].forEach((c, k) => $("e" + c + i).addEventListener("input", (e) => {
+        const v = parseFloat(e.target.value); if (!isFinite(v)) return;
+        const nv = a.v.slice(); nv[k] = v;
+        if (Math.hypot(nv[0], nv[1], nv[2]) < 1e-6) return;
+        a.v = nv; $("meta" + i).textContent = axisMeta(a); rebuildSoon();
+      }));
+      const lim = () => {
+        const lo = parseFloat($("emin" + i).value), hi = parseFloat($("emax" + i).value);
+        if (!isFinite(lo) || !isFinite(hi) || hi <= lo) return;
+        a.min = lo; a.max = hi; a.val = clamp(a.val, lo, hi);
+        $("meta" + i).textContent = axisMeta(a); setRange(i); rebuildSoon();
+      };
+      $("emin" + i).addEventListener("change", lim); $("emax" + i).addEventListener("change", lim);
+      $("eflip" + i).addEventListener("click", () => {
+        if (a.normal) a.sign = -a.sign;
+        else {
+          a.v = a.v.map((x) => (x === 0 ? 0 : -x));
+          ["x", "y", "z"].forEach((c, k) => { $("e" + c + i).value = a.v[k]; });
+        }
+        $("meta" + i).textContent = axisMeta(a); rebuildSoon();
+      });
+    });
+  }
+  function setRange(i) {
+    const a = S.axes[i], r = $("ar" + i), n = $("an" + i);
+    r.min = n.min = a.min; r.max = n.max = a.max;
+  }
+  let rebuildTimer = 0;
+  function rebuildSoon() { clearTimeout(rebuildTimer); rebuildTimer = setTimeout(() => { anim = null; buildStack(); dirty = true; }, 120); dirty = true; }
+  function userAngle(i, v) {
+    if (!isFinite(v)) return;
+    anim = null;
+    S.axes[i].val = clamp(v, S.axes[i].min, S.axes[i].max);
+    dirty = true;
+  }
+  function syncInputs() {
+    const act = document.activeElement;
+    S.axes.forEach((a, i) => {
+      const r = $("ar" + i), n = $("an" + i); if (!r) return;
+      r.value = a.val;
+      if (act !== n) n.value = a.val.toFixed(1);
+    });
+    $("offT").value = S.offT; $("offA").value = S.offA;
+    if (act !== $("offTN")) $("offTN").value = S.offT.toFixed(1);
+    if (act !== $("offAN")) $("offAN").value = S.offA.toFixed(0);
+    $("secT").value = S.sec.th; $("secA").value = S.sec.ph; $("terP").value = S.ter.ps;
+    if (act !== $("secTN")) $("secTN").value = S.sec.th.toFixed(1);
+    if (act !== $("secAN")) $("secAN").value = S.sec.ph.toFixed(1);
+    if (act !== $("terPN")) $("terPN").value = S.ter.ps.toFixed(1);
+    $("terL").value = S.ter.len;
+    if (act !== $("terLN")) $("terLN").value = S.ter.len.toFixed(2);
+  }
+  function labelSecond() {
+    const smp = S.sec.frame === "sample";
+    $("secTLab").innerHTML = (smp ? "Tilt" : "Polar") + " θ<sub>d</sub><small>" + (smp ? "from n" : "from lab +Z") + "</small>";
+    $("secALab").innerHTML = "Azimuth φ<sub>d</sub><small>" + (smp ? "about n, from the mark" : "from lab +X") + "</small>";
+    $("secNote").innerHTML = "e is always perpendicular to d, so it lies tangent to the unit sphere at d's tip. <b>ψ<sub>e</sub> = 0</b> points e the way d moves when θ<sub>d</sub> increases, <b>ψ<sub>e</sub> = 90°</b> the way it moves when φ<sub>d</sub> increases. " + (smp
+      ? "<b>Sample frame:</b> both arrows are fixed to the sample. Tilt is measured from n, azimuth around n starting at the in-plane mark. Driving any motor carries both arrows along."
+      : "<b>Lab frame:</b> both arrows stay put while the motors move n. Switching frames keeps both arrows where they are and re-expresses their angles.");
+  }
+
+  // ---------- readouts ----------
+  function formulaText() {
+    const eq = (a, b) => a.distanceTo(b) < 1e-6;
+    const arms = S.axes.filter((a) => !a.normal), spin = S.axes.find((a) => a.normal);
+    const spinLine = spin ? "\n" + spin.name + " = " + fmt(spin.val, 2) + "° turns the sample about n: n is unchanged,\nthe in-plane mark turns about n by that angle." : "";
+    const deg = (a) => fmt(a.val, 2) + "°";
+    if (arms.length === 2 && eq(axisVec(arms[0]), V(0, 0, 1)) && eq(axisVec(arms[1]), V(0, 1, 0))) {
+      const z = arms[0].name, y = arms[1].name;
+      const ns = S.offT === 0 ? "ẑ" : "n_s";
+      return "n = R_Z(" + z + ")·R_Y(" + y + ")·" + ns + (spin ? "·(R_n(" + spin.name + ") leaves n fixed)" : "") + "\n" +
+        (S.offT === 0
+          ? "  = (cos " + z + " sin " + y + ",  sin " + z + " sin " + y + ",  cos " + y + ")\n" +
+            "θ = |" + y + "|\n" +
+            "φ = " + z + " (" + y + " > 0)  or  " + z + " + 180° (" + y + " < 0)\n"
+          : "n_s = normal on the Y arm = " + fv(sampleNormal()) + " (offset " + fmt(S.offT) + "°)\n") +
+        "with " + z + " = " + deg(arms[0]) + ", " + y + " = " + deg(arms[1]) + spinLine;
+    }
+    return "n = " + arms.map((a, i) => "R" + "₁₂₃₄₅₆"[i] + "(θ" + "₁₂₃₄₅₆"[i] + ")").join("·") + "·n_s\n" +
+      "n_s = normal in the top-arm frame = " + fv(sampleNormal()) + "\n" +
+      (S.offT > 0 ? "With an offset, n_s is tilted " + fmt(S.offT) + "° off the top arm's Z." : "Axis vectors are custom, so the general product is used.") + spinLine;
+  }
+  function readouts() {
+    const vals = curVals(), n = normalAt(vals), sp = spherical(n), m = inPlaneAt(vals);
+    $("hudTh").textContent = fmt(sp.th, 2) + "°";
+    $("hudPh").textContent = sp.ph === null ? "undefined" : fmt(sp.ph, 2) + "°";
+    $("hudVec").textContent = "n = " + fv(n, 4);
+    let html =
+      "<dt>Unit vector n (lab)</dt><dd>" + fv(n, 4) + "</dd>" +
+      "<dt>Polar θ from +Z</dt><dd>" + fmt(sp.th, 3) + "°</dd>" +
+      "<dt>Azimuth φ from +X</dt><dd>" + (sp.ph === null ? "undefined (n is vertical)" : fmt(sp.ph, 3) + "°") + "</dd>" +
+      "<dt>In-plane mark (lab)</dt><dd>" + fv(m, 3) + "</dd>";
+    const d = secondAt(vals), sd = spherical(d);
+    html +=
+      "<dt>Arrow d (lab)</dt><dd>" + fv(d, 4) + "</dd>" +
+      "<dt>d polar θ / azimuth φ</dt><dd>" + fmt(sd.th, 2) + "° / " + (sd.ph === null ? "undefined" : fmt(sd.ph, 2) + "°") + "</dd>" +
+      "<dt>Angle n ↔ d</dt><dd>" + fmt(angBetween(n, d), 2) + "°</dd>";
+    const e = thirdAt(vals), tip = d.clone().addScaledVector(e, S.ter.len);
+    html +=
+      "<dt>Arrow e direction (lab)</dt><dd>" + fv(e, 4) + "</dd>" +
+      "<dt>Angle d ↔ e</dt><dd>" + fmt(angBetween(d, e), 2) + "°</dd>" +
+      "<dt>Tip of e = d + " + fmt(S.ter.len, 2) + "·e</dt><dd>" + fv(tip, 4) + "</dd>" +
+      "<dt>|tip of e|</dt><dd>" + fmt(tip.length(), 4) + "</dd>";
+    S.axes.forEach((a, i) => {
+      html += "<dt>" + a.name.replace(/[&<>]/g, "") + " axis now</dt><dd>" + fv(axisVec(a).applyQuaternion(chainQ(0, i, vals)), 3) + "</dd>";
+    });
+    $("state").innerHTML = html;
+    $("formula").textContent = formulaText();
+    if ($("showTrail").checked) trail.push(n.clone().multiplyScalar(RS * 1.008));
+  }
+
+  // ---------- homing motion ----------
+  let anim = null, dirty = true;
+  const ease = (u) => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+  function startMove(to) {
+    const from = curVals();
+    const D = Math.max(0.5, Math.max.apply(null, from.map((f, i) => Math.abs(to[i] - f))) / SPEED) * 1000;
+    anim = { from, to, D, t0: performance.now() };
+  }
+  function stepMove(now) {
+    const u = clamp((now - anim.t0) / anim.D, 0, 1), s = ease(u);
+    S.axes.forEach((a, i) => { a.val = anim.from[i] + (anim.to[i] - anim.from[i]) * s; });
+    if (u >= 1) anim = null;
+  }
+
+  // ---------- events ----------
+  $("homeAll").addEventListener("click", () => startMove(S.axes.map(() => 0)));
+  function userOffset(t, a) {
+    anim = null;
+    if (t !== null && isFinite(t)) S.offT = clamp(t, 0, 20);
+    if (a !== null && isFinite(a)) S.offA = wrap(a);
+    rebuildSoon();
+  }
+  $("offT").addEventListener("input", (e) => userOffset(parseFloat(e.target.value), null));
+  $("offA").addEventListener("input", (e) => userOffset(null, parseFloat(e.target.value)));
+  $("offTN").addEventListener("input", (e) => userOffset(parseFloat(e.target.value), null));
+  $("offAN").addEventListener("input", (e) => userOffset(null, parseFloat(e.target.value)));
+  ["showCircles", "showSphere", "showTrail"].forEach((id) => $(id).addEventListener("change", applyVisibility));
+  $("clearTrail").addEventListener("click", () => trail.clear());
+  function userDir(o, th, ph) {
+    if (th !== null && isFinite(th)) o.th = clamp(th, 0, 180);
+    if (ph !== null && isFinite(ph)) o.ph = wrap(ph);
+    dirty = true;
+  }
+  $("secT").addEventListener("input", (ev) => userDir(S.sec, parseFloat(ev.target.value), null));
+  $("secA").addEventListener("input", (ev) => userDir(S.sec, null, parseFloat(ev.target.value)));
+  $("secTN").addEventListener("input", (ev) => userDir(S.sec, parseFloat(ev.target.value), null));
+  $("secAN").addEventListener("input", (ev) => userDir(S.sec, null, parseFloat(ev.target.value)));
+  function userPsi(v) { if (!isFinite(v)) return; S.ter.ps = wrap(v); dirty = true; }
+  $("terP").addEventListener("input", (ev) => userPsi(parseFloat(ev.target.value)));
+  $("terPN").addEventListener("input", (ev) => userPsi(parseFloat(ev.target.value)));
+  function userLen(v) { if (!isFinite(v)) return; S.ter.len = clamp(v, 0.1, 0.95); buildSecond(); dirty = true; }
+  $("terL").addEventListener("input", (ev) => userLen(parseFloat(ev.target.value)));
+  $("terLN").addEventListener("input", (ev) => userLen(parseFloat(ev.target.value)));
+  $("secFrameSeg").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button"); if (!b || b.dataset.v === S.sec.frame) return;
+    const vals = curVals(), d = secondAt(vals), e = thirdAt(vals);
+    S.sec.frame = b.dataset.v;
+    const toLocal = (v) => S.sec.frame === "sample" ? v.applyQuaternion(mountQ(vals).invert()) : v;
+    setDirFromVec(S.sec, toLocal(d)); setPsiFromLocal(toLocal(e));
+    $("secFrameSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.v === S.sec.frame)));
+    labelSecond(); dirty = true;
+  });
+  $("secAlign").addEventListener("click", () => {
+    if (S.sec.frame === "sample") S.sec.th = 0; else setDirFromVec(S.sec, normalAt(curVals()));
+    dirty = true;
+  });
+  $("showSec").addEventListener("change", applyVisibility);
+  $("resetView").addEventListener("click", resetView);
+
+  // ---------- snapshot: PNG of the view (with an angle caption) + TXT of the configuration ----------
+  function stamp() {
+    const d = new Date(), p = (x) => String(x).padStart(2, "0");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "_" + p(d.getHours()) + "-" + p(d.getMinutes()) + "-" + p(d.getSeconds());
+  }
+  function download(name, blob) {
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+  function snapshotData() {
+    const vals = curVals(), n = normalAt(vals), sp = spherical(n), m = inPlaneAt(vals);
+    const d = secondAt(vals), sd = spherical(d), e = thirdAt(vals), tip = d.clone().addScaledVector(e, S.ter.len);
+    return { vals, n, sp, m, d, sd, e, tip };
+  }
+  function snapshotText(base, imgName) {
+    const { n, sp, m, d, sd, e, tip } = snapshotData(), smp = S.sec.frame === "sample";
+    const w = Math.max.apply(null, S.axes.map((a) => a.name.length));
+    const ph = (x) => x === null ? "undefined" : fmt(x, 3) + "°";
+    const L = [
+      "Goniometer snapshot",
+      "Time:        " + new Date().toString(),
+      "Image:       " + imgName,
+      "Motors:      " + S.axes.map((a) => a.name).join(" → ") + " (sample spins about n)",
+      "",
+      "MOTORS (base first, angle · axis at home · limits)",
+      ...S.axes.map((a) => "  " + a.name.padEnd(w) + "  " + fmt(a.val, 3).padStart(9) + "°   axis " + (a.normal ? (a.sign < 0 ? "−n" : "n") + " (sample normal)" : fv(axisVec(a), 3)) + "   " + fmt(a.min, 0) + "…" + fmt(a.max, 0) + "°"),
+      "",
+      "SAMPLE MOUNT",
+      "  Normal offset tilt:   " + fmt(S.offT, 2) + "°",
+      "  Offset direction:     " + fmt(S.offA, 1) + "°",
+      "",
+      "NORMAL n (lab, Z up)",
+      "  n =                  " + fv(n, 6),
+      "  Polar θ from +Z:     " + fmt(sp.th, 3) + "°",
+      "  Azimuth φ from +X:   " + ph(sp.ph),
+      "  In-plane mark:       " + fv(m, 6),
+      "",
+      "RED ARROWS (angles measured in the " + (smp ? "sample frame: θ from n, φ about n from the mark" : "lab frame: θ from +Z, φ from +X") + ")",
+      "  d  θ_d = " + fmt(S.sec.th, 3) + "°,  φ_d = " + fmt(S.sec.ph, 3) + "°",
+      "     d (lab) =         " + fv(d, 6) + "   polar " + fmt(sd.th, 3) + "°, azimuth " + ph(sd.ph),
+      "     angle n ↔ d:      " + fmt(angBetween(n, d), 3) + "°",
+      "  e  ψ_e = " + fmt(S.ter.ps, 3) + "° about d,  length = " + fmt(S.ter.len, 3),
+      "     e direction =     " + fv(e, 6),
+      "     tip of e =        " + fv(tip, 6) + "   |tip| = " + fmt(tip.length(), 6),
+      "",
+      "CAMERA",
+      "  position " + fv(camera.position, 3) + ",  target " + fv(controls.target, 3),
+      "",
+      "JSON " + JSON.stringify({
+        preset: PRESET_KEY,
+        motors: S.axes.map((a) => a.normal
+          ? { name: a.name, angle: a.val, axis: "normal", sign: a.sign, min: a.min, max: a.max }
+          : { name: a.name, angle: a.val, axis: a.v, min: a.min, max: a.max }),
+        offset: { tilt: S.offT, direction: S.offA },
+        arrows: { frame: S.sec.frame, d: { theta: S.sec.th, phi: S.sec.ph }, e: { psi: S.ter.ps, length: S.ter.len } },
+        normal: [n.x, n.y, n.z],
+        camera: { position: camera.position.toArray(), target: controls.target.toArray() }
+      })
+    ];
+    return L.join("\r\n") + "\r\n";
+  }
+  function snapshotImage(done) {
+    renderer.render(scene, camera);           // draw now so the WebGL buffer is valid for the copy below
+    const src = renderer.domElement, c = document.createElement("canvas");
+    c.width = src.width; c.height = src.height;
+    const g = c.getContext("2d");
+    g.drawImage(src, 0, 0);
+    const { sp } = snapshotData(), k = src.width / Math.max(1, stage.clientWidth);
+    const lines = [
+      "θ " + fmt(sp.th, 2) + "°   φ " + (sp.ph === null ? "—" : fmt(sp.ph, 2) + "°"),
+      S.axes.map((a) => a.name + " " + fmt(a.val, 2) + "°").join("   "),
+      "d: θ " + fmt(S.sec.th, 1) + "°, φ " + fmt(S.sec.ph, 1) + "° (" + S.sec.frame + ")   e: ψ " + fmt(S.ter.ps, 1) + "°, len " + fmt(S.ter.len, 2),
+      new Date().toLocaleString()
+    ];
+    const fs = 13 * k, lh = fs * 1.45, pad = 10 * k;
+    g.font = "500 " + fs + "px 'IBM Plex Mono', Consolas, monospace";
+    const bw = Math.max.apply(null, lines.map((t) => g.measureText(t).width)) + pad * 2, bh = lines.length * lh + pad * 1.4;
+    g.globalAlpha = 0.86; g.fillStyle = C["--scene-bg"]; g.fillRect(14 * k, 14 * k, bw, bh); g.globalAlpha = 1;
+    g.fillStyle = css("--fg"); g.textBaseline = "top";
+    lines.forEach((t, i) => g.fillText(t, 14 * k + pad, 14 * k + pad * 0.8 + i * lh));
+    c.toBlob(done, "image/png");
+  }
+  $("snap").addEventListener("click", () => {
+    const prefix = ($("snapName").value.trim() || "goniometer").replace(/[\\/:*?"<>|\s]+/g, "_");
+    const base = prefix + "_" + stamp();
+    snapshotImage((png) => {
+      if (png) download(base + ".png", png);
+      setTimeout(() => download(base + ".txt", new Blob([snapshotText(base, base + ".png")], { type: "text/plain;charset=utf-8" })), 300);
+      $("snapNote").innerHTML = "Saved <b>" + base + ".png</b> and <b>" + base + ".txt</b> to your downloads folder.";
+    });
+  });
+
+  // load: read the JSON line of a snapshot TXT (or a bare JSON file) and restore the configuration
+  const num = (x, dflt) => (typeof x === "number" && isFinite(x) ? x : dflt);
+  const vec3 = (a) => Array.isArray(a) && a.length === 3 && a.every((x) => typeof x === "number" && isFinite(x));
+  function applySnapshot(J) {
+    if (!J || !Array.isArray(J.motors) || !J.motors.length) throw new Error("no motor list found");
+    // current files list Base, Y arm, Spin in order; older files are matched by name (their "Stage" was a spin about the arm's Z)
+    const isNew = J.preset === PRESET_KEY, OLD = ["Base", "Y arm", "Stage"];
+    const pick = (i) => isNew ? J.motors[i] : J.motors.find((m) => m && m.name === OLD[i]);
+    loadPreset();
+    S.axes.forEach((a, i) => {
+      const m = pick(i); if (!m) return;
+      const min = num(m.min, a.min), max = num(m.max, a.max);
+      if (max <= min) throw new Error("motor " + (i + 1) + " is malformed");
+      if (a.normal) a.sign = m.sign < 0 ? -1 : 1;
+      else {
+        if (!vec3(m.axis) || Math.hypot.apply(null, m.axis) < 1e-6) throw new Error("motor " + (i + 1) + " is malformed");
+        a.v = m.axis.slice();
+      }
+      if (isNew && m.name) a.name = String(m.name).slice(0, 12);
+      a.min = min; a.max = max; a.val = clamp(num(m.angle, 0), min, max);
+    });
+    const dropped = isNew ? [] : J.motors.filter((m) => m && OLD.indexOf(m.name) < 0 && Math.abs(num(m.angle, 0)) > 1e-9);
+    const o = J.offset || {};
+    S.offT = clamp(num(o.tilt, 0), 0, 20); S.offA = wrap(num(o.direction, 0));
+    const ar = J.arrows || {}, ad = ar.d || {}, ae = ar.e || {};
+    S.sec.frame = ar.frame === "lab" ? "lab" : "sample";
+    S.sec.th = clamp(num(ad.theta, S.sec.th), 0, 180); S.sec.ph = wrap(num(ad.phi, S.sec.ph));
+    S.ter.ps = wrap(num(ae.psi, S.ter.ps)); S.ter.len = clamp(num(ae.length, S.ter.len), 0.1, 0.95);
+    $("secFrameSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.v === S.sec.frame)));
+    if (J.camera && vec3(J.camera.position) && vec3(J.camera.target)) {
+      camera.position.fromArray(J.camera.position); controls.target.fromArray(J.camera.target); controls.update();
+    }
+    anim = null; trail.clear();
+    labelSecond(); buildStack(); buildSecond(); renderAxes();
+    dirty = true;
+    return dropped.length ? " This snapshot had " + dropped.map((m) => String(m.name).replace(/[&<>]/g, "") + " at " + fmt(num(m.angle, 0), 2) + "°").join(", ") +
+      ". That motor no longer exists, so the normal and the red arrows may differ from the original." : "";
+  }
+  function loadSnapshotFile(file) {
+    if (!file) return;
+    file.text().then((txt) => {
+      const line = txt.split(/\r?\n/).find((l) => /^JSON\s/.test(l));
+      const warn = applySnapshot(JSON.parse(line ? line.replace(/^JSON\s+/, "") : txt));
+      $("snapNote").innerHTML = "Loaded <b>" + file.name.replace(/[&<>]/g, "") + "</b>." + warn;
+    }).catch((err) => {
+      $("snapNote").innerHTML = "<b>Could not load " + file.name.replace(/[&<>]/g, "") + ":</b> " + String(err.message || err).replace(/[&<>]/g, "") + ". Pick a TXT saved by this page.";
+    });
+  }
+  $("load").addEventListener("click", () => $("loadFile").click());
+  $("loadFile").addEventListener("change", (e) => { loadSnapshotFile(e.target.files[0]); e.target.value = ""; });
+  stage.addEventListener("dragover", (e) => { e.preventDefault(); });
+  stage.addEventListener("drop", (e) => { e.preventDefault(); loadSnapshotFile(e.dataTransfer.files[0]); });
+
+  new ResizeObserver(() => {
+    const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }).observe(stage);
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (mq.addEventListener) mq.addEventListener("change", applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---------- boot: example pose ----------
+  loadPreset();
+  S.axes[0].val = 30; S.axes[1].val = 20;
+  labelSecond();
+  applyTheme();
+
+  function frame(now) {
+    if (anim) { stepMove(now); dirty = true; }
+    if (dirty) {
+      S.axes.forEach((a, i) => { if (frames[i + 1]) frames[i + 1].quaternion.copy(qAx(axisVec(a), a.val)); });
+      updateCircles();
+      updateRed(curVals());
+      syncInputs(); readouts();
+      dirty = false;
+    }
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
