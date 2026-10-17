@@ -183,6 +183,10 @@ so the two motors do the shortest rotation followed by a twist about +Z. That tw
 
 To try it, leave the base at 0 and enter one of these in the page. **Arrow d (lab)** in the readout then shows (0, 0, 1), and its polar angle shows 0°. The page computes the pose from the motor values, so the order you type them in does not matter.
 
+![Solution A in three panels. Home: n along +Z, d tilted 35° from n. After the Y arm turns 35° about lab Y, n is tilted and +Z lies on the dashed cone that d sweeps about n. After a 150° spin about n, d points along +Z while n stays put.](docs/derivation_example.svg)
+
+*Solution A, step by step. **Home:** the sample is flat, and d sits θ<sub>d</sub> = 35° from the normal. **1:** the Y arm tilts the sample by β = θ<sub>d</sub> about lab Y. That carries n off +Z by 35°, so +Z now lies on the dashed cone that d sweeps when the sample spins about n. **2:** spinning ψ = 150° about n moves d along that cone onto +Z. The normal does not move, and the in-plane mark turns with the sample.*
+
 > **Mount offset.** With a mount offset (tilt t at direction a), the sample normal in the Y-arm frame is $\mathbf{n}_s = (\sin t\cos a,\ \sin t\sin a,\ \cos t)$, and the sample frame is pre-tilted by $T$, the shortest rotation taking ẑ onto $\mathbf{n}_s$. The same two steps apply.
 >
 > 1. The Y arm tilts the normal to $\mathbf{n} = R_Y(\beta)\,\mathbf{n}_s$. Spin then sweeps d around a cone of half-angle θ_d about n, so ẑ must lie on it: $\hat{\mathbf{z}}\cdot\mathbf{n} = \cos\theta_d$, i.e.
