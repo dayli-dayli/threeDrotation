@@ -185,7 +185,7 @@ To try it, leave the base at 0 and enter one of these in the page. **Arrow d (la
 
 ![Solution A in three panels. Home: n along +Z, d tilted 35° from n. After the Y arm turns 35° about lab Y, n is tilted and +Z lies on the dashed cone that d sweeps about n. After a 150° spin about n, d points along +Z while n stays put.](docs/derivation_example.svg)
 
-*Solution A, step by step. **Home:** the sample is flat, and d sits θ<sub>d</sub> = 35° from the normal. **1:** the Y arm tilts the sample by β = θ<sub>d</sub> about lab Y. That carries n off +Z by 35°, so +Z now lies on the dashed cone that d sweeps when the sample spins about n. **2:** spinning ψ = 150° about n moves d along that cone onto +Z. The normal does not move, and the in-plane mark turns with the sample.*
+*Solution A, step by step. **Home:** the sample is flat, and d sits θ_d = 35° from the normal. **1:** the Y arm tilts the sample by β = θ_d about lab Y. That carries n off +Z by 35°, so +Z now lies on the dashed cone that d sweeps when the sample spins about n. **2:** spinning ψ = 150° about n moves d along that cone onto +Z. The normal does not move, and the in-plane mark turns with the sample.*
 
 > **Mount offset.** With a mount offset (tilt t at direction a), the sample normal in the Y-arm frame is $\mathbf{n}_s = (\sin t\cos a,\ \sin t\sin a,\ \cos t)$, and the sample frame is pre-tilted by $T$, the shortest rotation taking ẑ onto $\mathbf{n}_s$. The same two steps apply.
 >
